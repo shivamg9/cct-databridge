@@ -1,0 +1,1773 @@
+<title>CCT DataBridge</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* CCT DataBridge on the NigeriaG2P design baseline v1.0 (Sathvick Infotech, 19 Oct 2026).
+   Layout: 34 px programme strip, 236 px white "Staff services" rail, 70 px module bar,
+   then breadcrumb (screen ID) → title → task line → note band → white 12 px cards → footer line.
+   Foundations: 8 px grid, 44 px primary buttons, visible labels, status as text + colour.
+   The baseline is light-only by design, so this page commits to a single light theme. */
+:root {
+  color-scheme: light;
+  --brand: #08745D;        /* Brand / Primary */
+  --brand-ink: #07634E;    /* secondary button text */
+  --brand-deep: #143D35;   /* programme strip, mobile header */
+  --ink: #183D35;          /* Text / Primary */
+  --ink-2: #3F5A51;
+  --muted: #63776D;
+  --canvas: #F5F7F6;       /* Surface / Canvas */
+  --outer: #E4EBE8;
+  --surface: #FFFFFF;
+  --surface-2: #F5F8F6;
+  --surface-3: #EEF3F0;    /* bar track */
+  --note: #EAF2EC;         /* note band */
+  --badge: #EDF4EF;        /* neutral badge */
+  --line: #D8E3DD;         /* Divider / Default */
+  --line-soft: #E0E9E3;
+  --line-input: #AFC3B9;
+  --warn-wash: #FFF1D8;  --warn-ink: #7A4E00;   /* State / Warning */
+  --crit-wash: #FCE9E4;  --crit-ink: #9C2F1E;   /* State / Error */
+  --good-wash: #E5F3EA;  --good-ink: #0B5E43;   /* State / Success */
+  --empty-wash: #EDF1F0; --info-wash: #E8F0F6; --info-ink: #1F4E79; /* empty, confirm */
+  --serious-wash: #FCEBDD; --serious-ink: #8A3A12;
+  /* chart marks: status marks tuned to the baseline; categorical slots from the validated dataviz palette */
+  --good: #08745D; --warn: #E0A100; --serious: #D9692F; --crit: #C4402F; --neutral-mark: #AFC3B9;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;
+  --grid: #E4EBE6; --axis: #C7D4CD; --focus: #1F6FD1;
+  --font: "Segoe UI", "Noto Sans", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SFMono-Regular", monospace;
+  --r-card: 12px; --r-ctl: 8px; --r-badge: 6px;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--canvas); color: var(--ink); font: 14px/1.5 var(--font); margin: 0; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--brand-deep); }
+table { font: inherit; color: inherit; border-collapse: collapse; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3, h4 { margin: 0; text-wrap: balance; color: var(--ink); }
+code, .mono { font-family: var(--font-mono); font-size: 12.5px; }
+a { color: var(--brand); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* programme strip + shell */
+.strip { background: var(--brand-deep); color: #FFFFFF; font-size: 12px; letter-spacing: .02em; text-transform: uppercase; padding-block: 8px; padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.strip span:last-child { opacity: .8; }
+.shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: calc(100% - 34px); }
+.rail { background: var(--surface); border-right: 1px solid var(--line-soft); position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 24px 18px; display: flex; flex-direction: column; gap: 16px; }
+.brand { display: flex; flex-direction: column; gap: 2px; padding: 0 6px 6px; }
+.brand-word { font-size: 27px; font-weight: 700; letter-spacing: -.01em; line-height: 1.15; color: var(--ink); }
+.brand-sub { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink); margin-top: 6px; }
+.brand-app { margin-top: 14px; font-size: 18px; font-weight: 700; line-height: 1.25; }
+.brand-app span { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.brand-mark { display: none; }
+.nav-group { display: flex; flex-direction: column; gap: 8px; }
+.nav-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px 6px 0; }
+.nav-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 8px 12px; color: var(--brand-ink); cursor: pointer; font-size: 14px; font-weight: 600; }
+.nav-btn:hover { border-color: var(--brand); }
+.nav-btn[aria-current="page"] { border-color: var(--brand); background: var(--note); color: var(--ink); box-shadow: inset 3px 0 0 var(--brand); }
+.nav-count { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: var(--r-badge); background: var(--crit-wash); color: var(--crit-ink); }
+.nav-count.warn { background: var(--warn-wash); color: var(--warn-ink); }
+.rail-role { margin-top: 8px; padding: 0 6px; font-size: 13px; line-height: 1.45; }
+.rail-role b { display: block; font-size: 11px; font-weight: 400; text-transform: uppercase; letter-spacing: .04em; }
+.rail-foot { margin-top: auto; padding: 16px 6px 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
+.main { min-width: 0; display: flex; flex-direction: column; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line-soft); min-height: 70px; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; justify-content: space-between; padding-block: 12px; padding-left: max(38px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); }
+.module-name { font-size: 16px; font-weight: 700; }
+.env { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.env-tag { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--ink); }
+.clock { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
+.clock time { font-family: var(--font-mono); color: var(--ink); font-size: 13px; }
+.who { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.content { padding-block: 26px 24px; padding-left: max(42px, env(safe-area-inset-left, 0px)); padding-right: max(42px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; max-width: 1480px; width: 100%; }
+.page-foot { font-size: 11.5px; color: var(--ink); padding-block: 8px 32px; padding-left: max(42px, env(safe-area-inset-left, 0px)); padding-right: max(42px, env(safe-area-inset-right, 0px)); }
+
+/* page header: breadcrumb → title → task line → note band */
+.page-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.page-head h1 { font-size: 32px; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
+.page-head p { margin: 8px 0 0; color: var(--ink); font-size: 16px; max-width: 80ch; }
+.crumbs { font-size: 11.5px; color: var(--ink); margin-bottom: 12px; }
+.crumbs button { background: none; border: 0; padding: 0; color: var(--brand); cursor: pointer; font-size: 11.5px; text-decoration: underline; text-underline-offset: 2px; }
+.note-band { background: var(--note); border-radius: var(--r-ctl); padding: 14px 16px; font-size: 13px; line-height: 1.5; color: var(--ink); }
+
+/* controls: 44 px primary, 32 px compact in tables */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 1px solid var(--brand); background: var(--surface); color: var(--brand-ink); border-radius: var(--r-ctl); padding: 8px 16px; cursor: pointer; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.btn:hover { background: var(--note); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #FFFFFF; }
+.btn.primary:hover { background: #066650; }
+.btn.danger { color: var(--crit-ink); border-color: #D9A196; }
+.btn.danger:hover { background: var(--crit-wash); }
+.btn.ghost { border-color: transparent; background: none; color: var(--brand-ink); padding-inline: 6px; min-height: 0; }
+.btn.ghost:hover { text-decoration: underline; }
+.btn.sm { min-height: 32px; padding: 4px 12px; font-size: 13px; }
+.btn[disabled], .btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+select, input[type=text], input[type=search], input[type=number], textarea { background: var(--surface); border: 1px solid var(--line-input); border-radius: 6px; padding: 8px 10px; font-size: 14px; min-height: 40px; min-width: 0; color: var(--ink); }
+textarea { width: 100%; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+label.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink); font-weight: 600; }
+label.field > input, label.field > select, label.field > textarea { font-weight: 400; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; padding: 16px 20px; background: var(--surface); border-radius: var(--r-card); }
+.seg { display: inline-flex; border: 1px solid var(--line-input); border-radius: var(--r-ctl); overflow: hidden; flex-wrap: wrap; }
+.seg button { border: 0; background: var(--surface); padding: 8px 12px; min-height: 40px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--line); color: var(--ink); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--brand); color: #FFFFFF; font-weight: 700; }
+
+/* cards */
+.panel { background: var(--surface); border-radius: var(--r-card); min-width: 0; }
+.panel > header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 18px 22px 14px; border-bottom: 1px solid var(--line-soft); }
+.panel > header h2, .panel > header h3 { font-size: 18px; font-weight: 700; }
+.panel > header .sub { font-size: 12.5px; color: var(--muted); }
+.panel .body { padding: 20px 22px; }
+.panel .body.flush { padding: 0; }
+.grid { display: grid; gap: 20px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.c3 { grid-column: span 3; } .c4 { grid-column: span 4; } .c5 { grid-column: span 5; } .c6 { grid-column: span 6; } .c7 { grid-column: span 7; } .c8 { grid-column: span 8; } .c12 { grid-column: span 12; }
+@media (max-width: 1100px) { .c3, .c4 { grid-column: span 6; } .c5, .c7, .c8 { grid-column: span 12; } }
+@media (max-width: 720px) { .c3, .c4, .c5, .c6, .c7, .c8 { grid-column: span 12; } }
+.note { font-size: 13.5px; color: var(--ink); }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spread { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+/* alerts: Alert/Error, Badge/Warning, success, note */
+.callout { background: var(--note); border-radius: var(--r-card); padding: 16px 20px; font-size: 13.5px; color: var(--ink); }
+.callout.warn { background: var(--warn-wash); }
+.callout.crit { background: var(--crit-wash); }
+.callout.ok { background: var(--good-wash); }
+.callout.ok > b:first-child { display: block; font-size: 16px; margin-bottom: 4px; }
+.callout b { color: var(--ink); }
+.callout.crit > b:first-child, .callout.warn > b:first-child { display: block; font-size: 16px; margin-bottom: 4px; }
+
+/* KPI tiles */
+.kpis { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.kpi { background: var(--surface); border: 0; border-radius: var(--r-card); padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; min-width: 0; text-align: left; cursor: default; }
+button.kpi { cursor: pointer; }
+button.kpi:hover { box-shadow: inset 0 0 0 1px var(--brand); }
+.kpi .k { font-size: 13.5px; color: var(--ink); display: flex; gap: 6px; align-items: center; }
+.kpi .v { font-size: 26px; font-weight: 700; line-height: 1.2; color: var(--ink); }
+.kpi .d { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.kpi[data-tone="crit"] { background: var(--crit-wash); }
+.kpi[data-tone="warn"] { background: var(--warn-wash); }
+.kpi[data-tone="serious"] { background: var(--serious-wash); }
+.kpi[data-tone="good"] { background: var(--good-wash); }
+.kpi[data-tone] .d { color: var(--ink-2); }
+.kpi-group-label { font-size: 18px; font-weight: 700; margin: 0 0 -8px; }
+
+/* status badges: text first, colour second */
+.pill { display: inline-block; vertical-align: middle; font-size: 12.5px; line-height: 1.2; padding: 5px 9px; border-radius: var(--r-badge); white-space: nowrap; background: var(--badge); color: var(--ink); }
+.pill::first-letter { text-transform: uppercase; }
+.pill.good { background: var(--good-wash); color: var(--good-ink); }
+.pill.warn { background: var(--warn-wash); color: var(--warn-ink); }
+.pill.serious { background: var(--serious-wash); color: var(--serious-ink); }
+.pill.crit { background: var(--crit-wash); color: var(--crit-ink); }
+.pill.info { background: var(--info-wash); color: var(--info-ink); }
+.pill.run::after { content: " …"; }
+.tag { font: 500 12px var(--font-mono); padding: 2px 6px; border-radius: 4px; background: var(--surface-3); color: var(--ink); white-space: nowrap; }
+.mock-tag { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 2px 6px; border-radius: 4px; background: var(--warn-wash); color: var(--warn-ink); }
+
+/* tables: list rows with soft dividers */
+.tbl-wrap { overflow-x: auto; }
+table.t { width: 100%; font-size: 13.5px; }
+table.t th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 12px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
+table.t th button { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+table.t td { padding: 12px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+table.t tr:last-child td { border-bottom: 0; }
+table.t tbody tr:hover td { background: var(--surface-2); }
+table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.t tr.sel td, table.t td.sel { background: var(--note); }
+.zero { color: var(--muted); }
+.empty { padding: 32px 20px; text-align: center; color: var(--ink-2); background: var(--empty-wash); border-radius: var(--r-card); margin: 12px; }
+.empty b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px; }
+
+/* stage timeline */
+.stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
+.stage { border-radius: var(--r-ctl); padding: 10px 11px; background: var(--surface-2); display: flex; flex-direction: column; gap: 3px; min-width: 0; border-left: 4px solid var(--line); }
+.stage .n { font-size: 11px; color: var(--muted); text-transform: lowercase; }
+.stage .n::first-letter { text-transform: uppercase; }
+.stage .l { font-size: 13.5px; font-weight: 700; line-height: 1.25; }
+.stage .c { font: 500 12px var(--font-mono); color: var(--ink-2); }
+.stage .t { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+.stage[data-s="DONE"] { border-left-color: var(--good); background: var(--good-wash); }
+.stage[data-s="WARN"] { border-left-color: var(--warn); background: var(--warn-wash); }
+.stage[data-s="FAILED"] { border-left-color: var(--crit); background: var(--crit-wash); }
+.stage[data-s="RUNNING"] { border-left-color: var(--focus); background: var(--info-wash); }
+.stage[data-s="SKIPPED"], .stage[data-s="PENDING"] { opacity: .6; border-left-style: dashed; }
+
+/* lineage */
+.lineage { display: flex; gap: 0; overflow-x: auto; padding: 4px 2px 8px; }
+.ln-node { flex: 1 0 150px; border-radius: var(--r-ctl); padding: 12px; background: var(--surface-2); display: flex; flex-direction: column; gap: 4px; min-width: 150px; border-top: 4px solid var(--line); }
+.ln-arrow { flex: 0 0 26px; display: grid; place-items: center; color: var(--muted); font-size: 18px; }
+.ln-node h4 { font-size: 14px; font-weight: 700; }
+.ln-node .meta { font: 11.5px/1.45 var(--font-mono); color: var(--ink-2); word-break: break-all; }
+.ln-node[data-s="good"] { border-top-color: var(--good); background: var(--good-wash); }
+.ln-node[data-s="warn"] { border-top-color: var(--warn); background: var(--warn-wash); }
+.ln-node[data-s="crit"] { border-top-color: var(--crit); background: var(--crit-wash); }
+.ln-node[data-s="none"] { border-top-style: dashed; opacity: .75; }
+
+/* key-value lists: label above value pattern from REG-003, condensed into two columns */
+dl.kv { display: grid; grid-template-columns: minmax(130px, max-content) minmax(0, 1fr); gap: 8px 16px; margin: 0; font-size: 13.5px; }
+dl.kv dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; padding-top: 2px; }
+dl.kv dd { margin: 0; min-width: 0; word-break: break-word; font-weight: 600; }
+dl.kv.small dd, dl.kv dd.small { font-weight: 400; }
+
+/* pipeline flow */
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.flow-step { background: var(--surface); border: 0; border-radius: var(--r-card); padding: 16px 18px; text-align: left; cursor: pointer; }
+.flow-step:hover { box-shadow: inset 0 0 0 1px var(--brand); }
+.flow-step .k { font-size: 13.5px; color: var(--ink); }
+.flow-step .v { font-size: 26px; font-weight: 700; }
+.flow-step .x { font-size: 12px; color: var(--muted); }
+.flow-step .bar { height: 10px; border-radius: 4px; background: var(--surface-3); margin-top: 10px; overflow: hidden; }
+.flow-step .bar i { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
+
+/* charts */
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { fill: var(--muted); font: 11px var(--font); }
+.chart .val { fill: var(--ink); font: 600 11.5px var(--font); }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .axis { stroke: var(--axis); stroke-width: 1; }
+.chart rect[data-tip]:hover, .chart circle[data-tip]:hover { filter: brightness(1.1); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink); margin-bottom: 10px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+/* plain-language refinement: expandable detail, guided journey */
+details.more, details.tech { border-top: 1px solid var(--line); padding-top: 8px; }
+details.more > summary, details.tech > summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--brand-ink); min-height: 32px; display: flex; align-items: center; gap: 6px; }
+details.more > summary::-webkit-details-marker, details.tech > summary::-webkit-details-marker { display: none; }
+details.more > summary::before, details.tech > summary::before { content: "▸"; font-size: 12px; }
+details.more[open] > summary::before, details.tech[open] > summary::before { content: "▾"; }
+details.tech > summary { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+.more-body { padding: 10px 0 4px; display: flex; flex-direction: column; gap: 16px; }
+.tech-body { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 12px 14px; margin-top: 8px; overflow-x: auto; }
+.tech-hidden { margin: 8px 0 0; }
+details.panel.demo > summary { list-style: none; }
+.kpis-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kpi .v small { font-size: 15px; font-weight: 600; color: var(--muted); }
+.kpis.totals { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.kpis.totals .kpi { border: 1px solid var(--line); }
+.kpis.totals .kpi[aria-pressed="true"] { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+button.kpi[disabled] { cursor: default; opacity: .75; }
+.seg.wrap { display: flex; flex-wrap: wrap; }
+h2.q { font-size: 20px; font-weight: 700; }
+tr.expand > td { background: var(--surface-2); padding: 16px; }
+.journey { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; counter-reset: j; }
+.journey li { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: var(--r-ctl); background: var(--surface-2); border: 1px solid var(--line); min-width: 0; }
+.journey li[data-tone="good"] { background: var(--good-wash); border-color: transparent; }
+.journey li[data-tone="crit"] { background: var(--crit-wash); border-color: transparent; }
+.journey li[data-tone="warn"] { background: var(--warn-wash); border-color: transparent; }
+.journey .j-n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line-input); font-size: 12px; font-weight: 700; }
+.journey li[data-tone="good"] .j-n { background: var(--brand); color: #FFFFFF; border-color: var(--brand); }
+.journey .j-l { font-weight: 700; font-size: 13.5px; }
+.journey .pill { align-self: flex-start; }
+.chart-table summary { font-size: 12.5px; color: var(--brand-ink); cursor: pointer; margin-top: 8px; font-weight: 600; }
+.chart-table table { font-size: 12.5px; margin-top: 6px; }
+.chart-table td, .chart-table th { padding: 3px 10px 3px 0; text-align: left; font-variant-numeric: tabular-nums; }
+.hb { display: flex; flex-direction: column; gap: 14px; }
+.hb-row { display: grid; grid-template-columns: minmax(130px, 32%) minmax(0, 1fr) 68px; gap: 14px; align-items: center; font-size: 13.5px; }
+.hb-l { color: var(--ink); min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
+.hb-l span { display: block; font-size: 11.5px; color: var(--muted); }
+.hb-track { display: flex; gap: 2px; height: 22px; background: var(--surface-3); border-radius: 4px; overflow: hidden; }
+.hb-track i { display: block; height: 100%; min-width: 2px; }
+.hb-track i:first-child { border-radius: 4px 0 0 4px; }
+.hb-track i:last-child { border-radius: 0 4px 4px 0; }
+.hb-track i:only-child { border-radius: 4px; }
+.hb-v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
+#tip { position: fixed; z-index: 100; pointer-events: none; background: var(--brand-deep); color: #FFFFFF; font-size: 12.5px; padding: 6px 9px; border-radius: 6px; max-width: 280px; white-space: pre-line; }
+
+/* tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; padding: 0 14px; }
+.tabs button { background: none; border: 0; padding: 14px 14px 12px; min-height: 44px; font-size: 14px; color: var(--ink-2); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); font-weight: 700; border-bottom-color: var(--brand); }
+
+/* wizard */
+.steps { display: flex; gap: 8px; flex-wrap: wrap; }
+.step-chip { display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--ink-2); min-height: 40px; padding: 6px 14px 6px 6px; border-radius: 20px; background: var(--surface-2); border: 1px solid var(--line); cursor: pointer; }
+.step-chip b { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); color: var(--ink); font-size: 12px; }
+.step-chip[aria-current="step"] { color: var(--ink); background: var(--note); border-color: var(--brand); font-weight: 700; }
+.step-chip[aria-current="step"] b { background: var(--brand); color: #FFFFFF; }
+.step-chip.done b { background: var(--good-wash); color: var(--good-ink); }
+.choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.choice button { text-align: left; border: 1px solid var(--line-input); border-radius: var(--r-card); padding: 16px; background: var(--surface); cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.choice button:hover { border-color: var(--brand); }
+.choice button[aria-pressed="true"] { border: 2px solid var(--brand); background: var(--note); padding: 15px; }
+.choice button[disabled] { opacity: .5; cursor: not-allowed; }
+.choice b { font-size: 16px; }
+.choice span { font-size: 13px; color: var(--ink-2); }
+.drop { border: 1px solid var(--line-input); border-radius: var(--r-ctl); padding: 22px; text-align: center; background: #EFF5F1; }
+.drop.over { border: 2px dashed var(--brand); background: var(--note); }
+.checks { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.checks li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 6px; }
+.ok-i { color: var(--good-ink); font-weight: 700; }
+.no-i { color: var(--crit-ink); font-weight: 700; }
+td.formula { background: var(--crit-wash) !important; color: var(--crit-ink); font-family: var(--font-mono); }
+
+/* scenario lab */
+.scen { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+.scen-card { border: 1px solid var(--line-soft); border-radius: var(--r-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); }
+.scen-card h4 { font-size: 15px; font-weight: 700; display: flex; gap: 8px; align-items: baseline; }
+.scen-card h4 span { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.scen-card p { margin: 0; font-size: 13px; color: var(--ink-2); flex: 1; }
+
+/* mapping */
+.cov { display: flex; height: 12px; border-radius: 4px; overflow: hidden; background: var(--surface-3); gap: 2px; }
+.cov i { display: block; height: 100%; }
+.map-row td { vertical-align: middle; }
+.map-row select, .map-row input { width: 100%; }
+.map-arrow { color: var(--muted); text-align: center; }
+tr.err td { background: var(--crit-wash); }
+
+/* modal: confirm pattern */
+.scrim { position: fixed; inset: 0; background: rgba(20, 61, 53, .45); z-index: 50; display: grid; place-items: center; padding: 16px; }
+.modal { background: var(--surface); border-radius: var(--r-card); width: min(640px, 100%); max-height: calc(100vh - 32px); overflow: auto; box-shadow: 0 20px 60px rgba(20, 61, 53, .25); }
+.modal.wide { width: min(980px, 100%); }
+.modal header { padding: 20px 22px 14px; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.modal header h2 { font-size: 20px; font-weight: 700; }
+.modal .body { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+.modal footer { padding: 14px 22px 20px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+pre.code { background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: var(--r-ctl); padding: 12px; overflow: auto; font: 12px/1.5 var(--font-mono); max-height: 360px; margin: 0; white-space: pre; }
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; background: var(--good-wash); color: var(--ink); border-left: 4px solid var(--brand); padding: 14px 18px; border-radius: var(--r-ctl); max-width: min(440px, calc(100vw - 32px)); font-size: 14px; box-shadow: 0 8px 24px rgba(20, 61, 53, .18); }
+.toast.crit { background: var(--crit-wash); border-left-color: var(--crit); }
+
+/* forms */
+.form { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px 18px; }
+.form .wide { grid-column: 1 / -1; }
+
+/* architecture */
+.offstage { position: absolute; left: -12000px; top: 0; width: 1100px; visibility: hidden; }
+#arch-static { display: flex; flex-direction: column; gap: 20px; padding-left: max(42px, env(safe-area-inset-left, 0px)); padding-right: max(42px, env(safe-area-inset-right, 0px)); padding-bottom: 24px; max-width: 1480px; }
+.diagram { background: var(--surface); border-radius: var(--r-card); min-width: 0; }
+.diagram > header { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 18px 22px 14px; border-bottom: 1px solid var(--line-soft); }
+.diagram h3 { font-size: 18px; font-weight: 700; }
+.diagram-body { overflow-x: auto; padding: 18px 22px; background: #FFFFFF; }
+.diagram-body pre.mermaid { margin: 0; background: none; border: 0; white-space: pre; font: 11px var(--font-mono); color: #333; }
+.diagram details { padding: 10px 22px 16px; }
+.diagram summary { cursor: pointer; font-size: 13px; color: var(--brand-ink); font-weight: 600; }
+
+/* simplified operator UI: large primary actions, three tiles, plain steps */
+.btn.lg { min-height: 56px; padding: 12px 28px; font-size: 17px; }
+.kpis-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kpis-3 .kpi { padding: 22px 24px; }
+.kpis-3 .kpi .k { font-size: 15px; }
+.kpis-3 .kpi .v { font-size: 34px; }
+.alert-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 15px; }
+.callout.result { font-size: 15px; display: flex; flex-direction: column; gap: 4px; }
+.callout.result b { font-size: 17px; }
+.tabs.big { padding: 0; }
+.tabs.big button { font-size: 15px; padding: 14px 18px 12px; }
+.field.inline { flex-direction: row; align-items: center; gap: 10px; max-width: 320px; }
+.choice.big button { min-height: 92px; padding: 18px 20px; }
+.choice.big b { font-size: 17px; }
+ol.steps { list-style: none; margin: 0; padding: 0; }
+.steps.big .step-chip { cursor: default; font-size: 15px; min-height: 44px; padding: 6px 18px 6px 6px; border-radius: 22px; }
+.steps.big .step-chip b { width: 30px; height: 30px; font-size: 14px; }
+.wiz-foot { border-top: 1px solid var(--line); padding-top: 14px; }
+.row.confirm { font-size: 15px; gap: 10px; }
+.row.confirm input { width: 20px; height: 20px; }
+.progress { height: 14px; border-radius: 7px; background: var(--surface-3); overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--brand); transition: width .3s; }
+
+/* mobile: M390 pattern — dark header bar, stacked content */
+@media (max-width: 860px) {
+  .kpis-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpis-3 { grid-template-columns: minmax(0, 1fr); }
+  .journey { grid-template-columns: 1fr; }
+  .strip { display: none; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: static; height: auto; flex-direction: column; padding: 0 0 12px; gap: 10px; border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .brand { background: var(--brand-deep); padding: 14px max(18px, env(safe-area-inset-left, 0px)); }
+  .brand-word { color: #FFFFFF; font-size: 21px; }
+  .brand-sub, .brand-app span { color: #CFE3DA; }
+  .brand-app { color: #FFFFFF; margin-top: 2px; font-size: 14px; }
+  .brand-sub { margin-top: 0; }
+  .nav-label, .rail-role, .rail-foot { display: none; }
+  .nav-wrap { display: flex; gap: 8px; overflow-x: auto; padding: 0 max(18px, env(safe-area-inset-left, 0px)); }
+  .nav-group { flex-direction: row; gap: 8px; }
+  .nav-btn { white-space: nowrap; width: auto; }
+  .topbar { position: static; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+  .content, .page-foot, #arch-static { padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+  .page-head h1 { font-size: 25px; }
+  dl.kv { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  dl.kv dd { margin-bottom: 8px; }
+  .hb-row { grid-template-columns: minmax(0, 1fr) 60px; }
+  .hb-row .hb-l { grid-column: 1 / -1; }
+}
+</style>
+
+<div id="app" aria-live="polite"></div>
+
+<!-- Architecture diagrams are static so the viewer can render Mermaid natively.
+     Source of truth: docs/architecture/*.mmd (injected by scripts/build.py). -->
+<div id="arch-static" class="offstage" aria-hidden="true">
+<!-- MERMAID:START -->
+<section class="diagram" id="dg-block-component">
+<header><h3>A. High-level block components</h3><code>docs/architecture/block-component.mmd</code></header>
+<div class="diagram-body"><pre class="mermaid">
+%% A. High-level block component diagram (proposed). Edit freely; scripts/build.py re-injects it into the prototype.
+flowchart LR
+  subgraph SRC[&quot;Source registries (external)&quot;]
+    NSR[&quot;NASSCO NSR API&quot;]
+    JOSH[&quot;State registry API&lt;br/&gt;e.g. Josh&quot;]
+    FUT[&quot;Future registries&quot;]
+    XLS[&quot;Excel / CSV uploads&lt;br/&gt;LGA desk officers&quot;]
+  end
+
+  subgraph EDGE[&quot;Edge&quot;]
+    GW[&quot;API gateway / WAF&lt;br/&gt;TLS 1.3, rate limits&quot;]
+    IDP[&quot;Keycloak OIDC&lt;br/&gt;RBAC, MFA&quot;]
+  end
+
+  subgraph MID[&quot;CCT DataBridge middleware&quot;]
+    UI[&quot;Admin console&lt;br/&gt;React&quot;]
+    CFG[&quot;Source registry&lt;br/&gt;configuration&quot;]
+    API_AD[&quot;API ingestion adapter&quot;]
+    IMP_AD[&quot;File import adapter&quot;]
+    ORCH[&quot;Ingestion orchestrator&lt;br/&gt;runs, stages, checkpoints&quot;]
+    SCH[&quot;Schema registry +&lt;br/&gt;mapping engine&quot;]
+    VAL[&quot;Validation +&lt;br/&gt;transformation&quot;]
+    DED[&quot;De-duplication +&lt;br/&gt;record matching&quot;]
+    CAN[&quot;Canonical model&lt;br/&gt;NSR 145 fields&quot;]
+    BUS[(&quot;Queue / event bus&lt;br/&gt;RabbitMQ&quot;)]
+    DEL[&quot;Primary delivery adapter&lt;br/&gt;idempotent, retry, DLQ&quot;]
+    REP[&quot;Replica sync monitor&quot;]
+    REC[&quot;Reconciliation service&quot;]
+    AUD[&quot;Audit service&quot;]
+    OBS[&quot;Observability +&lt;br/&gt;alerting&quot;]
+  end
+
+  subgraph DATA[&quot;Platform data services&quot;]
+    META[(&quot;Metadata / config DB&lt;br/&gt;PostgreSQL&quot;)]
+    OBJ[(&quot;Secure object storage&lt;br/&gt;quarantine, staging, reject&quot;)]
+    KMS[&quot;Secrets manager / KMS&quot;]
+  end
+
+  subgraph DEST[&quot;Destinations&quot;]
+    SR1[(&quot;MASTER_SR1&lt;br/&gt;OpenG2P registry&lt;br/&gt;/partner/ingest_data&quot;)]
+    SR2[(&quot;MASTER_SR2&lt;br/&gt;replica&quot;)]
+  end
+
+  NSR -- &quot;paged JSON over mTLS&quot; --&gt; API_AD
+  JOSH -- &quot;paged JSON&quot; --&gt; API_AD
+  FUT -. &quot;new connector via SDK&quot; .-&gt; API_AD
+  XLS -- &quot;upload via console&quot; --&gt; GW
+  UI --&gt; GW
+  GW -- &quot;token check&quot; --&gt; IDP
+  GW --&gt; CFG
+  GW --&gt; IMP_AD
+  CFG -- &quot;source config&quot; --&gt; ORCH
+  API_AD -- &quot;raw records&quot; --&gt; ORCH
+  IMP_AD -- &quot;quarantined file&quot; --&gt; OBJ
+  IMP_AD -- &quot;parsed rows&quot; --&gt; ORCH
+  ORCH -- &quot;map with version N&quot; --&gt; SCH
+  SCH --&gt; VAL
+  VAL -- &quot;valid canonical records&quot; --&gt; DED
+  DED --&gt; CAN
+  CAN -- &quot;delivery jobs&quot; --&gt; BUS
+  BUS --&gt; DEL
+  DEL -- &quot;upsert + idempotency key&quot; --&gt; SR1
+  SR1 -- &quot;streaming replication&quot; --&gt; SR2
+  REP -- &quot;read probe by internal_record_id&quot; --&gt; SR2
+  REC -- &quot;query by idempotency key&quot; --&gt; SR1
+  REC -- &quot;compare&quot; --&gt; META
+  DEL -- &quot;ack / failure&quot; --&gt; META
+  ORCH -- &quot;run state&quot; --&gt; META
+  API_AD -- &quot;credential lookup&quot; --&gt; KMS
+  DEL -- &quot;client cert&quot; --&gt; KMS
+  ORCH -- &quot;events&quot; --&gt; AUD
+  DEL -- &quot;metrics&quot; --&gt; OBS
+  REP -- &quot;lag metrics&quot; --&gt; OBS
+</pre></div>
+<details><summary>Mermaid source</summary><pre class="code">%% A. High-level block component diagram (proposed). Edit freely; scripts/build.py re-injects it into the prototype.
+flowchart LR
+  subgraph SRC[&quot;Source registries (external)&quot;]
+    NSR[&quot;NASSCO NSR API&quot;]
+    JOSH[&quot;State registry API&lt;br/&gt;e.g. Josh&quot;]
+    FUT[&quot;Future registries&quot;]
+    XLS[&quot;Excel / CSV uploads&lt;br/&gt;LGA desk officers&quot;]
+  end
+
+  subgraph EDGE[&quot;Edge&quot;]
+    GW[&quot;API gateway / WAF&lt;br/&gt;TLS 1.3, rate limits&quot;]
+    IDP[&quot;Keycloak OIDC&lt;br/&gt;RBAC, MFA&quot;]
+  end
+
+  subgraph MID[&quot;CCT DataBridge middleware&quot;]
+    UI[&quot;Admin console&lt;br/&gt;React&quot;]
+    CFG[&quot;Source registry&lt;br/&gt;configuration&quot;]
+    API_AD[&quot;API ingestion adapter&quot;]
+    IMP_AD[&quot;File import adapter&quot;]
+    ORCH[&quot;Ingestion orchestrator&lt;br/&gt;runs, stages, checkpoints&quot;]
+    SCH[&quot;Schema registry +&lt;br/&gt;mapping engine&quot;]
+    VAL[&quot;Validation +&lt;br/&gt;transformation&quot;]
+    DED[&quot;De-duplication +&lt;br/&gt;record matching&quot;]
+    CAN[&quot;Canonical model&lt;br/&gt;NSR 145 fields&quot;]
+    BUS[(&quot;Queue / event bus&lt;br/&gt;RabbitMQ&quot;)]
+    DEL[&quot;Primary delivery adapter&lt;br/&gt;idempotent, retry, DLQ&quot;]
+    REP[&quot;Replica sync monitor&quot;]
+    REC[&quot;Reconciliation service&quot;]
+    AUD[&quot;Audit service&quot;]
+    OBS[&quot;Observability +&lt;br/&gt;alerting&quot;]
+  end
+
+  subgraph DATA[&quot;Platform data services&quot;]
+    META[(&quot;Metadata / config DB&lt;br/&gt;PostgreSQL&quot;)]
+    OBJ[(&quot;Secure object storage&lt;br/&gt;quarantine, staging, reject&quot;)]
+    KMS[&quot;Secrets manager / KMS&quot;]
+  end
+
+  subgraph DEST[&quot;Destinations&quot;]
+    SR1[(&quot;MASTER_SR1&lt;br/&gt;OpenG2P registry&lt;br/&gt;/partner/ingest_data&quot;)]
+    SR2[(&quot;MASTER_SR2&lt;br/&gt;replica&quot;)]
+  end
+
+  NSR -- &quot;paged JSON over mTLS&quot; --&gt; API_AD
+  JOSH -- &quot;paged JSON&quot; --&gt; API_AD
+  FUT -. &quot;new connector via SDK&quot; .-&gt; API_AD
+  XLS -- &quot;upload via console&quot; --&gt; GW
+  UI --&gt; GW
+  GW -- &quot;token check&quot; --&gt; IDP
+  GW --&gt; CFG
+  GW --&gt; IMP_AD
+  CFG -- &quot;source config&quot; --&gt; ORCH
+  API_AD -- &quot;raw records&quot; --&gt; ORCH
+  IMP_AD -- &quot;quarantined file&quot; --&gt; OBJ
+  IMP_AD -- &quot;parsed rows&quot; --&gt; ORCH
+  ORCH -- &quot;map with version N&quot; --&gt; SCH
+  SCH --&gt; VAL
+  VAL -- &quot;valid canonical records&quot; --&gt; DED
+  DED --&gt; CAN
+  CAN -- &quot;delivery jobs&quot; --&gt; BUS
+  BUS --&gt; DEL
+  DEL -- &quot;upsert + idempotency key&quot; --&gt; SR1
+  SR1 -- &quot;streaming replication&quot; --&gt; SR2
+  REP -- &quot;read probe by internal_record_id&quot; --&gt; SR2
+  REC -- &quot;query by idempotency key&quot; --&gt; SR1
+  REC -- &quot;compare&quot; --&gt; META
+  DEL -- &quot;ack / failure&quot; --&gt; META
+  ORCH -- &quot;run state&quot; --&gt; META
+  API_AD -- &quot;credential lookup&quot; --&gt; KMS
+  DEL -- &quot;client cert&quot; --&gt; KMS
+  ORCH -- &quot;events&quot; --&gt; AUD
+  DEL -- &quot;metrics&quot; --&gt; OBS
+  REP -- &quot;lag metrics&quot; --&gt; OBS</pre></details>
+</section>
+<section class="diagram" id="dg-ingestion-flow">
+<header><h3>B. Critical ingestion flow</h3><code>docs/architecture/ingestion-flow.mmd</code></header>
+<div class="diagram-body"><pre class="mermaid">
+%% B. Critical ingestion flow with decision branches (proposed).
+flowchart TD
+  A([Operator selects source]) --&gt; B{Source enabled&lt;br/&gt;and config valid?}
+  B -- no --&gt; B1[SOURCE_DISABLED or config error&lt;br/&gt;refuse + audit] --&gt; Z([End: no run])
+  B -- yes --&gt; C{Mapping valid?&lt;br/&gt;required fields mapped}
+  C -- no --&gt; C1[FIELD_MAPPING_FAILED&lt;br/&gt;run BLOCKED] --&gt; Z
+  C -- yes --&gt; D{Mode}
+  D -- API --&gt; E[Get token from vault&lt;br/&gt;authenticate]
+  E --&gt; E1{Auth ok?}
+  E1 -- no --&gt; E2[AUTHENTICATION_FAILED&lt;br/&gt;run FAILED] --&gt; Z
+  E1 -- yes --&gt; F[Fetch page with watermark]
+  F --&gt; F1{HTTP status}
+  F1 -- &quot;429 / timeout&quot; --&gt; F2[Backoff using Retry-After&lt;br/&gt;retry page] --&gt; F
+  F1 -- &quot;200&quot; --&gt; F3{More pages?}
+  F3 -- yes --&gt; F
+  F3 -- no --&gt; G
+  D -- Import --&gt; H[Upload to quarantine&lt;br/&gt;scan type, size, signature]
+  H --&gt; H1{File safe?}
+  H1 -- no --&gt; H2[FILE_FORMAT_INVALID&lt;br/&gt;quarantined, not parsed] --&gt; Z
+  H1 -- yes --&gt; H3[Parse values only&lt;br/&gt;flag formula cells] --&gt; H4[Dry run + approval] --&gt; G
+  G{Schema matches&lt;br/&gt;registered version?}
+  G -- no --&gt; G1[SOURCE or FILE_SCHEMA_MISMATCH&lt;br/&gt;stop per policy] --&gt; Z
+  G -- yes --&gt; I[Map + transform&lt;br/&gt;mapping vN]
+  I --&gt; J{Record valid?}
+  J -- no --&gt; J1[Reject with field reasons&lt;br/&gt;error queue] --&gt; R
+  J -- yes --&gt; K{Duplicate or match?}
+  K -- &quot;in-batch duplicate&quot; --&gt; K1[DUPLICATE_RECORD&lt;br/&gt;held back] --&gt; R
+  K -- &quot;cross-source match&quot; --&gt; K2[MATCH_REQUIRES_REVIEW&lt;br/&gt;manual review] --&gt; K3{Reviewer decision}
+  K3 -- &quot;same person&quot; --&gt; R
+  K3 -- &quot;different person&quot; --&gt; L
+  K -- &quot;unique or update&quot; --&gt; L[Deliver to MASTER_SR1&lt;br/&gt;with idempotency key]
+  L --&gt; M{SR1 response}
+  M -- &quot;2xx accepted&quot; --&gt; M1[Poll commit status] --&gt; N
+  M -- &quot;5xx transient&quot; --&gt; M2{Attempts below max?}
+  M2 -- yes --&gt; M3[Schedule retry&lt;br/&gt;exp. backoff + jitter] --&gt; L
+  M2 -- no --&gt; M4[Retry exhausted&lt;br/&gt;dead letter] --&gt; R
+  M -- &quot;4xx permanent&quot; --&gt; M5[MASTER_WRITE_FAILED&lt;br/&gt;dead letter, fix at source] --&gt; R
+  M -- &quot;timeout&quot; --&gt; M6[MASTER_WRITE_OUTCOME_UNKNOWN]
+  M6 --&gt; M7[Reconcile: query by idempotency key]
+  M7 -- found --&gt; N
+  M7 -- &quot;not found&quot; --&gt; L
+  N[Written to SR1] --&gt; O{Visible on SR2&lt;br/&gt;within threshold?}
+  O -- &quot;not yet&quot; --&gt; O1[REPLICA_SYNC_PENDING&lt;br/&gt;lag alert] --&gt; O
+  O -- &quot;window expired&quot; --&gt; O2[REPLICA_SYNC_FAILED&lt;br/&gt;request re-sync] --&gt; O
+  O -- yes --&gt; P[Confirmed on SR2]
+  P --&gt; R[Reconcile run&lt;br/&gt;received = rejected + held + accepted&lt;br/&gt;accepted = written + failed + retry + unknown]
+  R --&gt; S([Run status derived from record states])
+</pre></div>
+<details><summary>Mermaid source</summary><pre class="code">%% B. Critical ingestion flow with decision branches (proposed).
+flowchart TD
+  A([Operator selects source]) --&gt; B{Source enabled&lt;br/&gt;and config valid?}
+  B -- no --&gt; B1[SOURCE_DISABLED or config error&lt;br/&gt;refuse + audit] --&gt; Z([End: no run])
+  B -- yes --&gt; C{Mapping valid?&lt;br/&gt;required fields mapped}
+  C -- no --&gt; C1[FIELD_MAPPING_FAILED&lt;br/&gt;run BLOCKED] --&gt; Z
+  C -- yes --&gt; D{Mode}
+  D -- API --&gt; E[Get token from vault&lt;br/&gt;authenticate]
+  E --&gt; E1{Auth ok?}
+  E1 -- no --&gt; E2[AUTHENTICATION_FAILED&lt;br/&gt;run FAILED] --&gt; Z
+  E1 -- yes --&gt; F[Fetch page with watermark]
+  F --&gt; F1{HTTP status}
+  F1 -- &quot;429 / timeout&quot; --&gt; F2[Backoff using Retry-After&lt;br/&gt;retry page] --&gt; F
+  F1 -- &quot;200&quot; --&gt; F3{More pages?}
+  F3 -- yes --&gt; F
+  F3 -- no --&gt; G
+  D -- Import --&gt; H[Upload to quarantine&lt;br/&gt;scan type, size, signature]
+  H --&gt; H1{File safe?}
+  H1 -- no --&gt; H2[FILE_FORMAT_INVALID&lt;br/&gt;quarantined, not parsed] --&gt; Z
+  H1 -- yes --&gt; H3[Parse values only&lt;br/&gt;flag formula cells] --&gt; H4[Dry run + approval] --&gt; G
+  G{Schema matches&lt;br/&gt;registered version?}
+  G -- no --&gt; G1[SOURCE or FILE_SCHEMA_MISMATCH&lt;br/&gt;stop per policy] --&gt; Z
+  G -- yes --&gt; I[Map + transform&lt;br/&gt;mapping vN]
+  I --&gt; J{Record valid?}
+  J -- no --&gt; J1[Reject with field reasons&lt;br/&gt;error queue] --&gt; R
+  J -- yes --&gt; K{Duplicate or match?}
+  K -- &quot;in-batch duplicate&quot; --&gt; K1[DUPLICATE_RECORD&lt;br/&gt;held back] --&gt; R
+  K -- &quot;cross-source match&quot; --&gt; K2[MATCH_REQUIRES_REVIEW&lt;br/&gt;manual review] --&gt; K3{Reviewer decision}
+  K3 -- &quot;same person&quot; --&gt; R
+  K3 -- &quot;different person&quot; --&gt; L
+  K -- &quot;unique or update&quot; --&gt; L[Deliver to MASTER_SR1&lt;br/&gt;with idempotency key]
+  L --&gt; M{SR1 response}
+  M -- &quot;2xx accepted&quot; --&gt; M1[Poll commit status] --&gt; N
+  M -- &quot;5xx transient&quot; --&gt; M2{Attempts below max?}
+  M2 -- yes --&gt; M3[Schedule retry&lt;br/&gt;exp. backoff + jitter] --&gt; L
+  M2 -- no --&gt; M4[Retry exhausted&lt;br/&gt;dead letter] --&gt; R
+  M -- &quot;4xx permanent&quot; --&gt; M5[MASTER_WRITE_FAILED&lt;br/&gt;dead letter, fix at source] --&gt; R
+  M -- &quot;timeout&quot; --&gt; M6[MASTER_WRITE_OUTCOME_UNKNOWN]
+  M6 --&gt; M7[Reconcile: query by idempotency key]
+  M7 -- found --&gt; N
+  M7 -- &quot;not found&quot; --&gt; L
+  N[Written to SR1] --&gt; O{Visible on SR2&lt;br/&gt;within threshold?}
+  O -- &quot;not yet&quot; --&gt; O1[REPLICA_SYNC_PENDING&lt;br/&gt;lag alert] --&gt; O
+  O -- &quot;window expired&quot; --&gt; O2[REPLICA_SYNC_FAILED&lt;br/&gt;request re-sync] --&gt; O
+  O -- yes --&gt; P[Confirmed on SR2]
+  P --&gt; R[Reconcile run&lt;br/&gt;received = rejected + held + accepted&lt;br/&gt;accepted = written + failed + retry + unknown]
+  R --&gt; S([Run status derived from record states])</pre></details>
+</section>
+<section class="diagram" id="dg-lld">
+<header><h3>C. Low-level design</h3><code>docs/architecture/lld.mmd</code></header>
+<div class="diagram-body"><pre class="mermaid">
+%% C. Low-level design: proposed logical components (not existing OpenG2P classes).
+classDiagram
+  direction LR
+  class SourceRegistryController {
+    +list() Source[]
+    +create(cfg) Source
+    +update(id, patch) Source
+    +setEnabled(id, flag)
+    +test(id) ConnectionResult
+    +remove(id) DependencyReport
+  }
+  class SourceConfigurationService {
+    +validate(cfg) Error[]
+    +checkOutboundUrl(url) Verdict
+    +resolveSecret(ref) Credential
+  }
+  class ApiIngestionAdapter {
+    +authenticate(source)
+    +fetchPage(cursor, watermark) Page
+    -handleThrottle(retryAfter)
+    -validateResponseSchema(page)
+  }
+  class FileImportAdapter {
+    +receive(upload) QuarantinedFile
+    +parse(file) RowStream
+  }
+  class UploadValidationService {
+    +checkExtension()
+    +checkSignature()
+    +checkSize()
+    +sanitizeName()
+    +scanMalware()
+  }
+  class SchemaRegistryService {
+    +register(sourceId, schema) Version
+    +fingerprint(headers) string
+    +compare(incoming, registered) Drift
+  }
+  class MappingService {
+    +validate(mapping) MappingReport
+    +publish(mapping, note) Version
+    +test(mapping, sample) Preview
+  }
+  class TransformationService {
+    +apply(rule, values) value
+  }
+  class ValidationService {
+    +validateCanonical(record) Issue[]
+  }
+  class RecordMatchingService {
+    +inBatch(records) Duplicate[]
+    +againstMaster(record) MatchCandidate
+  }
+  class IngestionOrchestrator {
+    +start(sourceId, mode, opts) Run
+    +advance(runId)
+    +checkpoint(runId, stage, offset)
+  }
+  class IngestionRunService {
+    +status(runId) RunStatus
+    +counts(runId) StageCounts
+  }
+  class DeliveryService {
+    +deliver(batch)
+    +idempotencyKey(record) string
+  }
+  class MasterRegistryAdapter {
+    +upsert(record, key) Ack
+    +findByKey(key) MasterRef
+    +commitStatus(ingestId) CommitState
+  }
+  class ReplicaSyncMonitor {
+    +probe(internalRecordId) bool
+    +lag() Duration
+  }
+  class RetryScheduler {
+    +schedule(record, attempt) Instant
+    +due() Record[]
+  }
+  class DeadLetterService {
+    +park(record, reason)
+    +release(recordId)
+  }
+  class ReconciliationService {
+    +reconcile(runId) ReconciliationResult
+    +resolveUnknown(record)
+  }
+  class AuditService {
+    +record(actor, action, target, outcome)
+  }
+  class MetricsAlertingService {
+    +emit(metric)
+    +alert(rule)
+  }
+  class Repositories {
+    &lt;&lt;persistence&gt;&gt;
+    +SourceRepo
+    +RunRepo
+    +RecordRepo
+    +ErrorRepo
+    +AuditRepo
+  }
+  class EventBus {
+    &lt;&lt;queue&gt;&gt;
+    +delivery_jobs
+    +delivery_retry
+    +delivery_dlq
+  }
+  SourceRegistryController --&gt; SourceConfigurationService
+  SourceRegistryController --&gt; AuditService
+  IngestionOrchestrator --&gt; ApiIngestionAdapter
+  IngestionOrchestrator --&gt; FileImportAdapter
+  FileImportAdapter --&gt; UploadValidationService
+  IngestionOrchestrator --&gt; SchemaRegistryService
+  IngestionOrchestrator --&gt; MappingService
+  MappingService --&gt; TransformationService
+  IngestionOrchestrator --&gt; ValidationService
+  IngestionOrchestrator --&gt; RecordMatchingService
+  IngestionOrchestrator --&gt; IngestionRunService
+  IngestionOrchestrator --&gt; EventBus
+  EventBus --&gt; DeliveryService
+  DeliveryService --&gt; MasterRegistryAdapter
+  DeliveryService --&gt; RetryScheduler
+  DeliveryService --&gt; DeadLetterService
+  RetryScheduler --&gt; EventBus
+  ReplicaSyncMonitor --&gt; MasterRegistryAdapter
+  ReconciliationService --&gt; MasterRegistryAdapter
+  ReconciliationService --&gt; ReplicaSyncMonitor
+  IngestionRunService --&gt; Repositories
+  DeliveryService --&gt; Repositories
+  AuditService --&gt; Repositories
+  DeliveryService --&gt; MetricsAlertingService
+  ReplicaSyncMonitor --&gt; MetricsAlertingService
+</pre></div>
+<details><summary>Mermaid source</summary><pre class="code">%% C. Low-level design: proposed logical components (not existing OpenG2P classes).
+classDiagram
+  direction LR
+  class SourceRegistryController {
+    +list() Source[]
+    +create(cfg) Source
+    +update(id, patch) Source
+    +setEnabled(id, flag)
+    +test(id) ConnectionResult
+    +remove(id) DependencyReport
+  }
+  class SourceConfigurationService {
+    +validate(cfg) Error[]
+    +checkOutboundUrl(url) Verdict
+    +resolveSecret(ref) Credential
+  }
+  class ApiIngestionAdapter {
+    +authenticate(source)
+    +fetchPage(cursor, watermark) Page
+    -handleThrottle(retryAfter)
+    -validateResponseSchema(page)
+  }
+  class FileImportAdapter {
+    +receive(upload) QuarantinedFile
+    +parse(file) RowStream
+  }
+  class UploadValidationService {
+    +checkExtension()
+    +checkSignature()
+    +checkSize()
+    +sanitizeName()
+    +scanMalware()
+  }
+  class SchemaRegistryService {
+    +register(sourceId, schema) Version
+    +fingerprint(headers) string
+    +compare(incoming, registered) Drift
+  }
+  class MappingService {
+    +validate(mapping) MappingReport
+    +publish(mapping, note) Version
+    +test(mapping, sample) Preview
+  }
+  class TransformationService {
+    +apply(rule, values) value
+  }
+  class ValidationService {
+    +validateCanonical(record) Issue[]
+  }
+  class RecordMatchingService {
+    +inBatch(records) Duplicate[]
+    +againstMaster(record) MatchCandidate
+  }
+  class IngestionOrchestrator {
+    +start(sourceId, mode, opts) Run
+    +advance(runId)
+    +checkpoint(runId, stage, offset)
+  }
+  class IngestionRunService {
+    +status(runId) RunStatus
+    +counts(runId) StageCounts
+  }
+  class DeliveryService {
+    +deliver(batch)
+    +idempotencyKey(record) string
+  }
+  class MasterRegistryAdapter {
+    +upsert(record, key) Ack
+    +findByKey(key) MasterRef
+    +commitStatus(ingestId) CommitState
+  }
+  class ReplicaSyncMonitor {
+    +probe(internalRecordId) bool
+    +lag() Duration
+  }
+  class RetryScheduler {
+    +schedule(record, attempt) Instant
+    +due() Record[]
+  }
+  class DeadLetterService {
+    +park(record, reason)
+    +release(recordId)
+  }
+  class ReconciliationService {
+    +reconcile(runId) ReconciliationResult
+    +resolveUnknown(record)
+  }
+  class AuditService {
+    +record(actor, action, target, outcome)
+  }
+  class MetricsAlertingService {
+    +emit(metric)
+    +alert(rule)
+  }
+  class Repositories {
+    &lt;&lt;persistence&gt;&gt;
+    +SourceRepo
+    +RunRepo
+    +RecordRepo
+    +ErrorRepo
+    +AuditRepo
+  }
+  class EventBus {
+    &lt;&lt;queue&gt;&gt;
+    +delivery_jobs
+    +delivery_retry
+    +delivery_dlq
+  }
+  SourceRegistryController --&gt; SourceConfigurationService
+  SourceRegistryController --&gt; AuditService
+  IngestionOrchestrator --&gt; ApiIngestionAdapter
+  IngestionOrchestrator --&gt; FileImportAdapter
+  FileImportAdapter --&gt; UploadValidationService
+  IngestionOrchestrator --&gt; SchemaRegistryService
+  IngestionOrchestrator --&gt; MappingService
+  MappingService --&gt; TransformationService
+  IngestionOrchestrator --&gt; ValidationService
+  IngestionOrchestrator --&gt; RecordMatchingService
+  IngestionOrchestrator --&gt; IngestionRunService
+  IngestionOrchestrator --&gt; EventBus
+  EventBus --&gt; DeliveryService
+  DeliveryService --&gt; MasterRegistryAdapter
+  DeliveryService --&gt; RetryScheduler
+  DeliveryService --&gt; DeadLetterService
+  RetryScheduler --&gt; EventBus
+  ReplicaSyncMonitor --&gt; MasterRegistryAdapter
+  ReconciliationService --&gt; MasterRegistryAdapter
+  ReconciliationService --&gt; ReplicaSyncMonitor
+  IngestionRunService --&gt; Repositories
+  DeliveryService --&gt; Repositories
+  AuditService --&gt; Repositories
+  DeliveryService --&gt; MetricsAlertingService
+  ReplicaSyncMonitor --&gt; MetricsAlertingService</pre></details>
+</section>
+<section class="diagram" id="dg-security-trust-boundaries">
+<header><h3>D. Security and trust boundaries</h3><code>docs/architecture/security-trust-boundaries.mmd</code></header>
+<div class="diagram-body"><pre class="mermaid">
+%% D. Security and trust boundaries (proposed). Threat entry points marked TE1..TE6.
+flowchart LR
+  subgraph Z0[&quot;Untrusted: internet / staff network&quot;]
+    USER[&quot;Staff browser&quot;]
+    FILE[&quot;Uploaded file&lt;br/&gt;TE1: malicious content&quot;]
+  end
+  subgraph Z1[&quot;Identity boundary&quot;]
+    KC[&quot;Keycloak OIDC&lt;br/&gt;MFA for admins&lt;br/&gt;5 min access tokens&quot;]
+  end
+  subgraph Z2[&quot;DMZ: gateway boundary&quot;]
+    GW[&quot;API gateway + WAF&lt;br/&gt;TLS 1.3, CSP, CORS allow-list&lt;br/&gt;rate + size limits&lt;br/&gt;TE2: API abuse&quot;]
+  end
+  subgraph Z3[&quot;Middleware application boundary: K8s namespace + network policies&quot;]
+    APP[&quot;DataBridge API&lt;br/&gt;server-side RBAC, object-level checks&quot;]
+    WRK[&quot;Workers&lt;br/&gt;values-only parsing&quot;]
+    AUD[&quot;Audit service&lt;br/&gt;append-only&quot;]
+  end
+  subgraph Z4[&quot;Queue boundary&quot;]
+    MQ[(&quot;RabbitMQ&lt;br/&gt;mTLS, per-vhost creds&quot;)]
+  end
+  subgraph Z5[&quot;Data boundary: encrypted at rest&quot;]
+    PG[(&quot;PostgreSQL metadata&lt;br/&gt;AES-256 at rest&quot;)]
+    S3[(&quot;Object store zones&lt;br/&gt;quarantine / staging / reject&lt;br/&gt;SSE-KMS&quot;)]
+  end
+  subgraph Z6[&quot;Secrets boundary&quot;]
+    VAULT[&quot;Vault / KMS&lt;br/&gt;short-lived creds, key rotation&quot;]
+  end
+  subgraph Z7[&quot;External source systems&quot;]
+    SRCAPI[&quot;Source registry APIs&lt;br/&gt;TE3: hostile responses&lt;br/&gt;TE4: SSRF via config&quot;]
+  end
+  subgraph Z8[&quot;Primary registry boundary&quot;]
+    SR1[(&quot;MASTER_SR1&quot;)]
+  end
+  subgraph Z9[&quot;Replica boundary&quot;]
+    SR2[(&quot;MASTER_SR2 read-only&quot;)]
+  end
+  subgraph Z10[&quot;Logging and monitoring boundary&quot;]
+    SIEM[&quot;Loki / Prometheus / SIEM&lt;br/&gt;PII-redacted logs&quot;]
+  end
+
+  USER -- &quot;OIDC login&quot; --&gt; KC
+  USER -- &quot;HTTPS + bearer token&quot; --&gt; GW
+  FILE -- &quot;multipart upload&quot; --&gt; GW
+  GW -- &quot;JWT validated&quot; --&gt; APP
+  APP -- &quot;authz decision + audit event&quot; --&gt; AUD
+  APP -- &quot;jobs&quot; --&gt; MQ
+  MQ --&gt; WRK
+  WRK -- &quot;allow-listed egress only, mTLS&quot; --&gt; SRCAPI
+  WRK -- &quot;quarantine then staging&quot; --&gt; S3
+  APP --&gt; PG
+  WRK --&gt; PG
+  WRK -- &quot;fetch secret by reference&quot; --&gt; VAULT
+  APP -- &quot;fetch secret by reference&quot; --&gt; VAULT
+  WRK -- &quot;mTLS upsert, idempotency key&lt;br/&gt;TE5: duplicate effects&quot; --&gt; SR1
+  SR1 -- &quot;replication&quot; --&gt; SR2
+  WRK -- &quot;read probe&quot; --&gt; SR2
+  APP -- &quot;redacted logs, metrics&quot; --&gt; SIEM
+  WRK -- &quot;redacted logs, metrics&quot; --&gt; SIEM
+  AUD -- &quot;forward&quot; --&gt; SIEM
+  USER -. &quot;TE6: unmasked PII access&lt;br/&gt;needs payload.view + justification&quot; .-&gt; APP
+</pre></div>
+<details><summary>Mermaid source</summary><pre class="code">%% D. Security and trust boundaries (proposed). Threat entry points marked TE1..TE6.
+flowchart LR
+  subgraph Z0[&quot;Untrusted: internet / staff network&quot;]
+    USER[&quot;Staff browser&quot;]
+    FILE[&quot;Uploaded file&lt;br/&gt;TE1: malicious content&quot;]
+  end
+  subgraph Z1[&quot;Identity boundary&quot;]
+    KC[&quot;Keycloak OIDC&lt;br/&gt;MFA for admins&lt;br/&gt;5 min access tokens&quot;]
+  end
+  subgraph Z2[&quot;DMZ: gateway boundary&quot;]
+    GW[&quot;API gateway + WAF&lt;br/&gt;TLS 1.3, CSP, CORS allow-list&lt;br/&gt;rate + size limits&lt;br/&gt;TE2: API abuse&quot;]
+  end
+  subgraph Z3[&quot;Middleware application boundary: K8s namespace + network policies&quot;]
+    APP[&quot;DataBridge API&lt;br/&gt;server-side RBAC, object-level checks&quot;]
+    WRK[&quot;Workers&lt;br/&gt;values-only parsing&quot;]
+    AUD[&quot;Audit service&lt;br/&gt;append-only&quot;]
+  end
+  subgraph Z4[&quot;Queue boundary&quot;]
+    MQ[(&quot;RabbitMQ&lt;br/&gt;mTLS, per-vhost creds&quot;)]
+  end
+  subgraph Z5[&quot;Data boundary: encrypted at rest&quot;]
+    PG[(&quot;PostgreSQL metadata&lt;br/&gt;AES-256 at rest&quot;)]
+    S3[(&quot;Object store zones&lt;br/&gt;quarantine / staging / reject&lt;br/&gt;SSE-KMS&quot;)]
+  end
+  subgraph Z6[&quot;Secrets boundary&quot;]
+    VAULT[&quot;Vault / KMS&lt;br/&gt;short-lived creds, key rotation&quot;]
+  end
+  subgraph Z7[&quot;External source systems&quot;]
+    SRCAPI[&quot;Source registry APIs&lt;br/&gt;TE3: hostile responses&lt;br/&gt;TE4: SSRF via config&quot;]
+  end
+  subgraph Z8[&quot;Primary registry boundary&quot;]
+    SR1[(&quot;MASTER_SR1&quot;)]
+  end
+  subgraph Z9[&quot;Replica boundary&quot;]
+    SR2[(&quot;MASTER_SR2 read-only&quot;)]
+  end
+  subgraph Z10[&quot;Logging and monitoring boundary&quot;]
+    SIEM[&quot;Loki / Prometheus / SIEM&lt;br/&gt;PII-redacted logs&quot;]
+  end
+
+  USER -- &quot;OIDC login&quot; --&gt; KC
+  USER -- &quot;HTTPS + bearer token&quot; --&gt; GW
+  FILE -- &quot;multipart upload&quot; --&gt; GW
+  GW -- &quot;JWT validated&quot; --&gt; APP
+  APP -- &quot;authz decision + audit event&quot; --&gt; AUD
+  APP -- &quot;jobs&quot; --&gt; MQ
+  MQ --&gt; WRK
+  WRK -- &quot;allow-listed egress only, mTLS&quot; --&gt; SRCAPI
+  WRK -- &quot;quarantine then staging&quot; --&gt; S3
+  APP --&gt; PG
+  WRK --&gt; PG
+  WRK -- &quot;fetch secret by reference&quot; --&gt; VAULT
+  APP -- &quot;fetch secret by reference&quot; --&gt; VAULT
+  WRK -- &quot;mTLS upsert, idempotency key&lt;br/&gt;TE5: duplicate effects&quot; --&gt; SR1
+  SR1 -- &quot;replication&quot; --&gt; SR2
+  WRK -- &quot;read probe&quot; --&gt; SR2
+  APP -- &quot;redacted logs, metrics&quot; --&gt; SIEM
+  WRK -- &quot;redacted logs, metrics&quot; --&gt; SIEM
+  AUD -- &quot;forward&quot; --&gt; SIEM
+  USER -. &quot;TE6: unmasked PII access&lt;br/&gt;needs payload.view + justification&quot; .-&gt; APP</pre></details>
+</section>
+<section class="diagram" id="dg-api-sequence">
+<header><h3>E. API ingestion sequence</h3><code>docs/architecture/api-sequence.mmd</code></header>
+<div class="diagram-body"><pre class="mermaid">
+%% E. API ingestion sequence: normal path plus failure, retry and reconciliation.
+sequenceDiagram
+  autonumber
+  actor Op as Operator
+  participant UI as Console
+  participant Orch as Orchestrator
+  participant V as Vault
+  participant Ad as API adapter
+  participant Src as Source API (mock)
+  participant MV as Mapping + validation
+  participant Q as Queue
+  participant Del as Delivery service
+  participant SR1 as MASTER_SR1
+  participant SR2 as MASTER_SR2
+  participant Rec as Reconciliation
+  participant Aud as Audit and metrics
+
+  Op-&gt;&gt;UI: Start ingestion (source, API)
+  UI-&gt;&gt;Orch: POST /runs
+  Orch-&gt;&gt;Aud: RUN_STARTED
+  Orch-&gt;&gt;V: get credential by reference
+  V--&gt;&gt;Orch: short-lived token
+  Orch-&gt;&gt;Ad: extract(watermark)
+  loop each page
+    Ad-&gt;&gt;Src: GET /records?cursor and updated_since
+    alt 200 OK
+      Src--&gt;&gt;Ad: page + next cursor
+    else 429 Too Many Requests
+      Src--&gt;&gt;Ad: Retry-After 2s
+      Ad-&gt;&gt;Ad: wait, retry same page
+    else timeout
+      Ad-&gt;&gt;Ad: backoff, retry same page
+    else 401
+      Src--&gt;&gt;Ad: invalid_client
+      Ad--&gt;&gt;Orch: AUTHENTICATION_FAILED
+      Orch-&gt;&gt;Aud: run FAILED
+    end
+  end
+  Ad--&gt;&gt;Orch: raw records
+  Orch-&gt;&gt;MV: schema check, map vN, validate, de-duplicate
+  MV--&gt;&gt;Orch: valid / invalid / duplicate / review
+  Orch-&gt;&gt;Q: enqueue delivery jobs (batches of 10)
+  Q-&gt;&gt;Del: job
+  Del-&gt;&gt;SR1: upsert(record, idempotency key)
+  alt 2xx accepted
+    SR1--&gt;&gt;Del: ingest_id
+    Del-&gt;&gt;SR1: poll commit status
+    SR1--&gt;&gt;Del: committed, internal_record_id
+  else 503 transient
+    SR1--&gt;&gt;Del: 503
+    Del-&gt;&gt;Q: schedule retry (exp. backoff + jitter)
+    Q-&gt;&gt;Del: retry later with same key
+  else 422 permanent
+    SR1--&gt;&gt;Del: 422
+    Del-&gt;&gt;Q: dead letter
+  else timeout, outcome unknown
+    Del--&gt;&gt;Orch: MASTER_WRITE_OUTCOME_UNKNOWN
+    Rec-&gt;&gt;SR1: query by idempotency key
+    alt found
+      SR1--&gt;&gt;Rec: internal_record_id
+      Rec-&gt;&gt;Orch: mark WRITTEN, no resend
+    else not found
+      Rec-&gt;&gt;Q: requeue with same key (safe)
+    end
+  end
+  SR1-)SR2: replication (async)
+  Del-&gt;&gt;SR2: read probe by internal_record_id
+  alt visible
+    SR2--&gt;&gt;Del: found
+  else lag above threshold
+    Del-&gt;&gt;Aud: REPLICA_SYNC_PENDING alert
+  end
+  Orch-&gt;&gt;Rec: reconcile run
+  Rec--&gt;&gt;Orch: buckets + identity checks
+  Orch-&gt;&gt;Aud: run status, metrics
+  UI--&gt;&gt;Op: run details, errors, reconciliation
+</pre></div>
+<details><summary>Mermaid source</summary><pre class="code">%% E. API ingestion sequence: normal path plus failure, retry and reconciliation.
+sequenceDiagram
+  autonumber
+  actor Op as Operator
+  participant UI as Console
+  participant Orch as Orchestrator
+  participant V as Vault
+  participant Ad as API adapter
+  participant Src as Source API (mock)
+  participant MV as Mapping + validation
+  participant Q as Queue
+  participant Del as Delivery service
+  participant SR1 as MASTER_SR1
+  participant SR2 as MASTER_SR2
+  participant Rec as Reconciliation
+  participant Aud as Audit and metrics
+
+  Op-&gt;&gt;UI: Start ingestion (source, API)
+  UI-&gt;&gt;Orch: POST /runs
+  Orch-&gt;&gt;Aud: RUN_STARTED
+  Orch-&gt;&gt;V: get credential by reference
+  V--&gt;&gt;Orch: short-lived token
+  Orch-&gt;&gt;Ad: extract(watermark)
+  loop each page
+    Ad-&gt;&gt;Src: GET /records?cursor and updated_since
+    alt 200 OK
+      Src--&gt;&gt;Ad: page + next cursor
+    else 429 Too Many Requests
+      Src--&gt;&gt;Ad: Retry-After 2s
+      Ad-&gt;&gt;Ad: wait, retry same page
+    else timeout
+      Ad-&gt;&gt;Ad: backoff, retry same page
+    else 401
+      Src--&gt;&gt;Ad: invalid_client
+      Ad--&gt;&gt;Orch: AUTHENTICATION_FAILED
+      Orch-&gt;&gt;Aud: run FAILED
+    end
+  end
+  Ad--&gt;&gt;Orch: raw records
+  Orch-&gt;&gt;MV: schema check, map vN, validate, de-duplicate
+  MV--&gt;&gt;Orch: valid / invalid / duplicate / review
+  Orch-&gt;&gt;Q: enqueue delivery jobs (batches of 10)
+  Q-&gt;&gt;Del: job
+  Del-&gt;&gt;SR1: upsert(record, idempotency key)
+  alt 2xx accepted
+    SR1--&gt;&gt;Del: ingest_id
+    Del-&gt;&gt;SR1: poll commit status
+    SR1--&gt;&gt;Del: committed, internal_record_id
+  else 503 transient
+    SR1--&gt;&gt;Del: 503
+    Del-&gt;&gt;Q: schedule retry (exp. backoff + jitter)
+    Q-&gt;&gt;Del: retry later with same key
+  else 422 permanent
+    SR1--&gt;&gt;Del: 422
+    Del-&gt;&gt;Q: dead letter
+  else timeout, outcome unknown
+    Del--&gt;&gt;Orch: MASTER_WRITE_OUTCOME_UNKNOWN
+    Rec-&gt;&gt;SR1: query by idempotency key
+    alt found
+      SR1--&gt;&gt;Rec: internal_record_id
+      Rec-&gt;&gt;Orch: mark WRITTEN, no resend
+    else not found
+      Rec-&gt;&gt;Q: requeue with same key (safe)
+    end
+  end
+  SR1-)SR2: replication (async)
+  Del-&gt;&gt;SR2: read probe by internal_record_id
+  alt visible
+    SR2--&gt;&gt;Del: found
+  else lag above threshold
+    Del-&gt;&gt;Aud: REPLICA_SYNC_PENDING alert
+  end
+  Orch-&gt;&gt;Rec: reconcile run
+  Rec--&gt;&gt;Orch: buckets + identity checks
+  Orch-&gt;&gt;Aud: run status, metrics
+  UI--&gt;&gt;Op: run details, errors, reconciliation</pre></details>
+</section>
+<section class="diagram" id="dg-file-import-sequence">
+<header><h3>F. File import sequence</h3><code>docs/architecture/file-import-sequence.mmd</code></header>
+<div class="diagram-body"><pre class="mermaid">
+%% F. File import sequence: quarantine, validation, preview, dry run, approval, batch processing.
+sequenceDiagram
+  autonumber
+  actor DO as Desk officer or operator
+  participant UI as Console
+  participant API as DataBridge API
+  participant OS as Object store
+  participant UV as Upload validation
+  participant P as Parser (values only)
+  participant SR as Schema registry
+  participant M as Mapping, validation, dedup
+  participant Del as Delivery service
+  participant SR1 as MASTER_SR1
+  participant SR2 as MASTER_SR2
+  participant Rec as Reconciliation
+  participant Aud as Audit
+
+  DO-&gt;&gt;UI: choose file (.csv or .xlsx)
+  UI-&gt;&gt;API: upload (pre-signed, multipart)
+  API-&gt;&gt;OS: write to quarantine zone
+  API-&gt;&gt;UV: scan
+  UV-&gt;&gt;UV: sanitise name, extension allow-list, size, signature, AV scan
+  alt rejected
+    UV--&gt;&gt;API: FILE_FORMAT_INVALID
+    API-&gt;&gt;Aud: upload rejected, file kept in quarantine
+    API--&gt;&gt;UI: reasons (file never parsed)
+  else passed
+    UV-&gt;&gt;OS: move to staging, record sha256
+    API-&gt;&gt;P: parse (no formulas, no macros)
+    P--&gt;&gt;API: headers + rows, formula cells flagged
+    API-&gt;&gt;SR: compare header fingerprint with template version
+    alt mismatch
+      SR--&gt;&gt;API: FILE_SCHEMA_MISMATCH (missing and unexpected columns)
+      API--&gt;&gt;UI: stop, show differences
+    else match
+      API--&gt;&gt;UI: preview first rows (sensitive columns masked)
+      DO-&gt;&gt;UI: run dry run
+      UI-&gt;&gt;API: dry run
+      API-&gt;&gt;M: map, validate, de-duplicate (no delivery)
+      M--&gt;&gt;API: would deliver / invalid / duplicate / review
+      API--&gt;&gt;UI: dry-run report
+      DO-&gt;&gt;UI: approve
+      UI-&gt;&gt;API: start run (approvedBy, dryRunRef)
+      API-&gt;&gt;Aud: RUN_STARTED with approval
+      loop each batch of 10
+        API-&gt;&gt;M: map + validate + dedup
+        M-&gt;&gt;Del: deliverable records
+        Del-&gt;&gt;SR1: upsert with idempotency key
+        SR1--&gt;&gt;Del: ack, 5xx, 422 or timeout
+      end
+      Del-&gt;&gt;OS: write redacted reject file to reject zone
+      SR1-)SR2: replication
+      Del-&gt;&gt;SR2: read probe
+      API-&gt;&gt;Rec: reconcile
+      Rec--&gt;&gt;UI: received vs rejected vs written vs replica
+      DO-&gt;&gt;UI: download error report (CSV, injection-safe)
+    end
+  end
+</pre></div>
+<details><summary>Mermaid source</summary><pre class="code">%% F. File import sequence: quarantine, validation, preview, dry run, approval, batch processing.
+sequenceDiagram
+  autonumber
+  actor DO as Desk officer or operator
+  participant UI as Console
+  participant API as DataBridge API
+  participant OS as Object store
+  participant UV as Upload validation
+  participant P as Parser (values only)
+  participant SR as Schema registry
+  participant M as Mapping, validation, dedup
+  participant Del as Delivery service
+  participant SR1 as MASTER_SR1
+  participant SR2 as MASTER_SR2
+  participant Rec as Reconciliation
+  participant Aud as Audit
+
+  DO-&gt;&gt;UI: choose file (.csv or .xlsx)
+  UI-&gt;&gt;API: upload (pre-signed, multipart)
+  API-&gt;&gt;OS: write to quarantine zone
+  API-&gt;&gt;UV: scan
+  UV-&gt;&gt;UV: sanitise name, extension allow-list, size, signature, AV scan
+  alt rejected
+    UV--&gt;&gt;API: FILE_FORMAT_INVALID
+    API-&gt;&gt;Aud: upload rejected, file kept in quarantine
+    API--&gt;&gt;UI: reasons (file never parsed)
+  else passed
+    UV-&gt;&gt;OS: move to staging, record sha256
+    API-&gt;&gt;P: parse (no formulas, no macros)
+    P--&gt;&gt;API: headers + rows, formula cells flagged
+    API-&gt;&gt;SR: compare header fingerprint with template version
+    alt mismatch
+      SR--&gt;&gt;API: FILE_SCHEMA_MISMATCH (missing and unexpected columns)
+      API--&gt;&gt;UI: stop, show differences
+    else match
+      API--&gt;&gt;UI: preview first rows (sensitive columns masked)
+      DO-&gt;&gt;UI: run dry run
+      UI-&gt;&gt;API: dry run
+      API-&gt;&gt;M: map, validate, de-duplicate (no delivery)
+      M--&gt;&gt;API: would deliver / invalid / duplicate / review
+      API--&gt;&gt;UI: dry-run report
+      DO-&gt;&gt;UI: approve
+      UI-&gt;&gt;API: start run (approvedBy, dryRunRef)
+      API-&gt;&gt;Aud: RUN_STARTED with approval
+      loop each batch of 10
+        API-&gt;&gt;M: map + validate + dedup
+        M-&gt;&gt;Del: deliverable records
+        Del-&gt;&gt;SR1: upsert with idempotency key
+        SR1--&gt;&gt;Del: ack, 5xx, 422 or timeout
+      end
+      Del-&gt;&gt;OS: write redacted reject file to reject zone
+      SR1-)SR2: replication
+      Del-&gt;&gt;SR2: read probe
+      API-&gt;&gt;Rec: reconcile
+      Rec--&gt;&gt;UI: received vs rejected vs written vs replica
+      DO-&gt;&gt;UI: download error report (CSV, injection-safe)
+    end
+  end</pre></details>
+</section>
+<section class="diagram" id="dg-data-model">
+<header><h3>G. Data model (ER)</h3><code>docs/architecture/data-model.mmd</code></header>
+<div class="diagram-body"><pre class="mermaid">
+%% G. Data model (proposed). Four areas: source-specific config, canonical master fields, operational metadata, security audit.
+erDiagram
+  SOURCE_REGISTRY ||--o{ SOURCE_SCHEMA : &quot;registers versions&quot;
+  SOURCE_REGISTRY ||--o{ FIELD_MAPPING : &quot;has versions&quot;
+  SOURCE_SCHEMA ||--o{ FIELD_MAPPING : &quot;maps from&quot;
+  CANONICAL_FIELD ||--o{ FIELD_MAPPING : &quot;maps to&quot;
+  SOURCE_REGISTRY ||--o{ INGESTION_RUN : &quot;runs&quot;
+  FIELD_MAPPING ||--o{ INGESTION_RUN : &quot;used by&quot;
+  DESTINATION_REGISTRY ||--o{ INGESTION_RUN : &quot;delivers to&quot;
+  INGESTION_RUN ||--o{ INGESTION_BATCH : &quot;split into&quot;
+  INGESTION_RUN ||--o{ INGESTION_RECORD : &quot;contains&quot;
+  INGESTION_BATCH ||--o{ INGESTION_RECORD : &quot;groups&quot;
+  INGESTION_RECORD ||--|| RECORD_PROVENANCE : &quot;has&quot;
+  INGESTION_RECORD ||--o{ VALIDATION_ISSUE : &quot;raises&quot;
+  INGESTION_RECORD ||--o{ DELIVERY_ATTEMPT : &quot;attempted&quot;
+  INGESTION_RECORD ||--o| REPLICA_SYNC_STATUS : &quot;replica state&quot;
+  INGESTION_RUN ||--o{ RECONCILIATION_RESULT : &quot;reconciled by&quot;
+  INGESTION_RUN ||--o{ AUDIT_EVENT : &quot;audited&quot;
+  SOURCE_REGISTRY ||--o{ AUDIT_EVENT : &quot;audited&quot;
+
+  SOURCE_REGISTRY {
+    string source_id PK
+    string name
+    string type
+    string connection_type &quot;API or IMPORT&quot;
+    string base_url
+    string auth_secret_ref &quot;vault reference only&quot;
+    string environment
+    boolean enabled
+    timestamp watermark
+    boolean removed &quot;soft delete&quot;
+  }
+  SOURCE_SCHEMA {
+    string schema_id PK
+    string source_id FK
+    string version
+    string header_fingerprint
+    json fields
+  }
+  CANONICAL_FIELD {
+    string field_id PK &quot;F001 to F145&quot;
+    string name UK
+    string object &quot;System, Household, Individual&quot;
+    string data_type
+    string mandatory &quot;Yes, No, Conditional&quot;
+    boolean match_key
+    string sensitivity
+    string fill &quot;source, derived, system&quot;
+  }
+  FIELD_MAPPING {
+    string mapping_id PK
+    string source_id FK
+    int version
+    json rules &quot;source fields, transform, target&quot;
+    string published_by
+    timestamp published_at
+  }
+  DESTINATION_REGISTRY {
+    string destination_id PK &quot;MASTER_SR1, MASTER_SR2&quot;
+    string role &quot;PRIMARY or REPLICA&quot;
+    string endpoint
+    string auth_secret_ref
+    json retry_policy
+    int lag_threshold_ms
+  }
+  INGESTION_RUN {
+    string run_id PK
+    string source_id FK
+    string mode
+    int mapping_version
+    string trace_id
+    string triggered_by
+    string approved_by
+    string dry_run_ref
+    timestamp started_at
+    timestamp ended_at
+    string file_sha256
+  }
+  INGESTION_BATCH {
+    string batch_id PK
+    string run_id FK
+    int size
+  }
+  INGESTION_RECORD {
+    string record_id PK
+    string run_id FK
+    string batch_id FK
+    string source_record_id
+    string source_key
+    string idempotency_key UK
+    string validation_status
+    string dedup_status
+    string primary_status
+    string replica_status
+    json canonical_payload &quot;encrypted, masked on read&quot;
+  }
+  RECORD_PROVENANCE {
+    string record_id PK
+    string source_registry_id
+    string source_record_version
+    timestamp source_updated_at
+    timestamp extracted_at
+    timestamp written_at
+    string internal_record_id &quot;SR1 id&quot;
+    string ingest_id
+    string transformation_version
+    json geo &quot;lat, lon, crs, accuracy, method, observed_at&quot;
+  }
+  VALIDATION_ISSUE {
+    string issue_id PK
+    string record_id FK
+    string code
+    string field
+    string severity
+    string message &quot;no personal values&quot;
+  }
+  DELIVERY_ATTEMPT {
+    string attempt_id PK
+    string record_id FK
+    int attempt_no
+    string outcome
+    int http_status
+    timestamp at
+    string triggered_by
+  }
+  REPLICA_SYNC_STATUS {
+    string record_id PK
+    string status
+    timestamp due_at
+    timestamp confirmed_at
+    int lag_ms
+  }
+  RECONCILIATION_RESULT {
+    string result_id PK
+    string run_id FK
+    int received
+    int accepted
+    int primary_written
+    int destination_count
+    int replica_confirmed
+    boolean balanced
+  }
+  AUDIT_EVENT {
+    string event_id PK
+    timestamp at
+    string actor
+    string role
+    string action
+    string target
+    string outcome
+    string detail &quot;justification, no PII&quot;
+  }
+</pre></div>
+<details><summary>Mermaid source</summary><pre class="code">%% G. Data model (proposed). Four areas: source-specific config, canonical master fields, operational metadata, security audit.
+erDiagram
+  SOURCE_REGISTRY ||--o{ SOURCE_SCHEMA : &quot;registers versions&quot;
+  SOURCE_REGISTRY ||--o{ FIELD_MAPPING : &quot;has versions&quot;
+  SOURCE_SCHEMA ||--o{ FIELD_MAPPING : &quot;maps from&quot;
+  CANONICAL_FIELD ||--o{ FIELD_MAPPING : &quot;maps to&quot;
+  SOURCE_REGISTRY ||--o{ INGESTION_RUN : &quot;runs&quot;
+  FIELD_MAPPING ||--o{ INGESTION_RUN : &quot;used by&quot;
+  DESTINATION_REGISTRY ||--o{ INGESTION_RUN : &quot;delivers to&quot;
+  INGESTION_RUN ||--o{ INGESTION_BATCH : &quot;split into&quot;
+  INGESTION_RUN ||--o{ INGESTION_RECORD : &quot;contains&quot;
+  INGESTION_BATCH ||--o{ INGESTION_RECORD : &quot;groups&quot;
+  INGESTION_RECORD ||--|| RECORD_PROVENANCE : &quot;has&quot;
+  INGESTION_RECORD ||--o{ VALIDATION_ISSUE : &quot;raises&quot;
+  INGESTION_RECORD ||--o{ DELIVERY_ATTEMPT : &quot;attempted&quot;
+  INGESTION_RECORD ||--o| REPLICA_SYNC_STATUS : &quot;replica state&quot;
+  INGESTION_RUN ||--o{ RECONCILIATION_RESULT : &quot;reconciled by&quot;
+  INGESTION_RUN ||--o{ AUDIT_EVENT : &quot;audited&quot;
+  SOURCE_REGISTRY ||--o{ AUDIT_EVENT : &quot;audited&quot;
+
+  SOURCE_REGISTRY {
+    string source_id PK
+    string name
+    string type
+    string connection_type &quot;API or IMPORT&quot;
+    string base_url
+    string auth_secret_ref &quot;vault reference only&quot;
+    string environment
+    boolean enabled
+    timestamp watermark
+    boolean removed &quot;soft delete&quot;
+  }
+  SOURCE_SCHEMA {
+    string schema_id PK
+    string source_id FK
+    string version
+    string header_fingerprint
+    json fields
+  }
+  CANONICAL_FIELD {
+    string field_id PK &quot;F001 to F145&quot;
+    string name UK
+    string object &quot;System, Household, Individual&quot;
+    string data_type
+    string mandatory &quot;Yes, No, Conditional&quot;
+    boolean match_key
+    string sensitivity
+    string fill &quot;source, derived, system&quot;
+  }
+  FIELD_MAPPING {
+    string mapping_id PK
+    string source_id FK
+    int version
+    json rules &quot;source fields, transform, target&quot;
+    string published_by
+    timestamp published_at
+  }
+  DESTINATION_REGISTRY {
+    string destination_id PK &quot;MASTER_SR1, MASTER_SR2&quot;
+    string role &quot;PRIMARY or REPLICA&quot;
+    string endpoint
+    string auth_secret_ref
+    json retry_policy
+    int lag_threshold_ms
+  }
+  INGESTION_RUN {
+    string run_id PK
+    string source_id FK
+    string mode
+    int mapping_version
+    string trace_id
+    string triggered_by
+    string approved_by
+    string dry_run_ref
+    timestamp started_at
+    timestamp ended_at
+    string file_sha256
+  }
+  INGESTION_BATCH {
+    string batch_id PK
+    string run_id FK
+    int size
+  }
+  INGESTION_RECORD {
+    string record_id PK
+    string run_id FK
+    string batch_id FK
+    string source_record_id
+    string source_key
+    string idempotency_key UK
+    string validation_status
+    string dedup_status
+    string primary_status
+    string replica_status
+    json canonical_payload &quot;encrypted, masked on read&quot;
+  }
+  RECORD_PROVENANCE {
+    string record_id PK
+    string source_registry_id
+    string source_record_version
+    timestamp source_updated_at
+    timestamp extracted_at
+    timestamp written_at
+    string internal_record_id &quot;SR1 id&quot;
+    string ingest_id
+    string transformation_version
+    json geo &quot;lat, lon, crs, accuracy, method, observed_at&quot;
+  }
+  VALIDATION_ISSUE {
+    string issue_id PK
+    string record_id FK
+    string code
+    string field
+    string severity
+    string message &quot;no personal values&quot;
+  }
+  DELIVERY_ATTEMPT {
+    string attempt_id PK
+    string record_id FK
+    int attempt_no
+    string outcome
+    int http_status
+    timestamp at
+    string triggered_by
+  }
+  REPLICA_SYNC_STATUS {
+    string record_id PK
+    string status
+    timestamp due_at
+    timestamp confirmed_at
+    int lag_ms
+  }
+  RECONCILIATION_RESULT {
+    string result_id PK
+    string run_id FK
+    int received
+    int accepted
+    int primary_written
+    int destination_count
+    int replica_confirmed
+    boolean balanced
+  }
+  AUDIT_EVENT {
+    string event_id PK
+    timestamp at
+    string actor
+    string role
+    string action
+    string target
+    string outcome
+    string detail &quot;justification, no PII&quot;
+  }</pre></details>
+</section>
+<section class="diagram" id="dg-deployment">
+<header><h3>H. Deployment</h3><code>docs/architecture/deployment.mmd</code></header>
+<div class="diagram-body"><pre class="mermaid">
+%% H. Deployment (recommended). [P] = implemented in this prototype as a browser simulation; [R] = recommendation only.
+flowchart TB
+  subgraph Users[&quot;Users&quot;]
+    B[&quot;Browser&lt;br/&gt;[P] prototype console&quot;]
+  end
+  subgraph K8s[&quot;Kubernetes cluster, RKE2 [R]&quot;]
+    subgraph Edge[&quot;Ingress&quot;]
+      ING[&quot;Nginx / Istio gateway&lt;br/&gt;TLS 1.3, WAF&quot;]
+    end
+    subgraph App[&quot;databridge namespace&quot;]
+      WEB[&quot;Web UI pods&lt;br/&gt;React static&quot;]
+      APIS[&quot;API service pods&lt;br/&gt;FastAPI, 2+ replicas&quot;]
+      WK[&quot;Worker pods&lt;br/&gt;Celery, HPA on queue depth&quot;]
+      SCHED[&quot;Scheduler&lt;br/&gt;retry + replica monitor&quot;]
+    end
+    subgraph Shared[&quot;Shared services&quot;]
+      MQ[(&quot;RabbitMQ&lt;br/&gt;jobs, retry, DLQ&quot;)]
+      RED[(&quot;Redis&lt;br/&gt;locks, rate budgets&quot;)]
+      KC[&quot;Keycloak&quot;]
+    end
+    subgraph Obs[&quot;Monitoring&quot;]
+      OTEL[&quot;OpenTelemetry collector&quot;]
+      PROM[&quot;Prometheus + Grafana&quot;]
+      LOKI[&quot;Loki&quot;]
+    end
+  end
+  subgraph Data[&quot;Managed data [R]&quot;]
+    PG[(&quot;PostgreSQL&lt;br/&gt;metadata, runs, audit&quot;)]
+    MINIO[(&quot;MinIO / S3&lt;br/&gt;quarantine, staging, reject&quot;)]
+    VAULT[&quot;Vault + KMS&quot;]
+  end
+  subgraph Ext[&quot;External source systems&quot;]
+    NSR[&quot;NASSCO NSR API&lt;br/&gt;[P] mock adapter&quot;]
+    STATE[&quot;State registries&lt;br/&gt;[P] mock adapter&quot;]
+  end
+  subgraph Reg[&quot;OpenG2P registry deployment&quot;]
+    SR1[(&quot;MASTER_SR1&lt;br/&gt;partner-api /partner/ingest_data&lt;br/&gt;[P] simulated store&quot;)]
+    SR2[(&quot;MASTER_SR2 replica&lt;br/&gt;[P] simulated replica&quot;)]
+  end
+
+  B --&gt; ING
+  ING --&gt; WEB
+  ING --&gt; APIS
+  APIS --&gt; KC
+  APIS --&gt; PG
+  APIS --&gt; MQ
+  APIS --&gt; MINIO
+  WK --&gt; MQ
+  WK --&gt; RED
+  WK --&gt; PG
+  WK --&gt; MINIO
+  WK --&gt; VAULT
+  APIS --&gt; VAULT
+  SCHED --&gt; MQ
+  WK -- &quot;egress allow-list&quot; --&gt; NSR
+  WK -- &quot;egress allow-list&quot; --&gt; STATE
+  WK -- &quot;mTLS&quot; --&gt; SR1
+  SR1 -- &quot;replication&quot; --&gt; SR2
+  SCHED -- &quot;read probe&quot; --&gt; SR2
+  APIS --&gt; OTEL
+  WK --&gt; OTEL
+  OTEL --&gt; PROM
+  OTEL --&gt; LOKI
+</pre></div>
+<details><summary>Mermaid source</summary><pre class="code">%% H. Deployment (recommended). [P] = implemented in this prototype as a browser simulation; [R] = recommendation only.
+flowchart TB
+  subgraph Users[&quot;Users&quot;]
+    B[&quot;Browser&lt;br/&gt;[P] prototype console&quot;]
+  end
+  subgraph K8s[&quot;Kubernetes cluster, RKE2 [R]&quot;]
+    subgraph Edge[&quot;Ingress&quot;]
+      ING[&quot;Nginx / Istio gateway&lt;br/&gt;TLS 1.3, WAF&quot;]
+    end
+    subgraph App[&quot;databridge namespace&quot;]
+      WEB[&quot;Web UI pods&lt;br/&gt;React static&quot;]
+      APIS[&quot;API service pods&lt;br/&gt;FastAPI, 2+ replicas&quot;]
+      WK[&quot;Worker pods&lt;br/&gt;Celery, HPA on queue depth&quot;]
+      SCHED[&quot;Scheduler&lt;br/&gt;retry + replica monitor&quot;]
+    end
+    subgraph Shared[&quot;Shared services&quot;]
+      MQ[(&quot;RabbitMQ&lt;br/&gt;jobs, retry, DLQ&quot;)]
+      RED[(&quot;Redis&lt;br/&gt;locks, rate budgets&quot;)]
+      KC[&quot;Keycloak&quot;]
+    end
+    subgraph Obs[&quot;Monitoring&quot;]
+      OTEL[&quot;OpenTelemetry collector&quot;]
+      PROM[&quot;Prometheus + Grafana&quot;]
+      LOKI[&quot;Loki&quot;]
+    end
+  end
+  subgraph Data[&quot;Managed data [R]&quot;]
+    PG[(&quot;PostgreSQL&lt;br/&gt;metadata, runs, audit&quot;)]
+    MINIO[(&quot;MinIO / S3&lt;br/&gt;quarantine, staging, reject&quot;)]
+    VAULT[&quot;Vault + KMS&quot;]
+  end
+  subgraph Ext[&quot;External source systems&quot;]
+    NSR[&quot;NASSCO NSR API&lt;br/&gt;[P] mock adapter&quot;]
+    STATE[&quot;State registries&lt;br/&gt;[P] mock adapter&quot;]
+  end
+  subgraph Reg[&quot;OpenG2P registry deployment&quot;]
+    SR1[(&quot;MASTER_SR1&lt;br/&gt;partner-api /partner/ingest_data&lt;br/&gt;[P] simulated store&quot;)]
+    SR2[(&quot;MASTER_SR2 replica&lt;br/&gt;[P] simulated replica&quot;)]
+  end
+
+  B --&gt; ING
+  ING --&gt; WEB
+  ING --&gt; APIS
+  APIS --&gt; KC
+  APIS --&gt; PG
+  APIS --&gt; MQ
+  APIS --&gt; MINIO
+  WK --&gt; MQ
+  WK --&gt; RED
+  WK --&gt; PG
+  WK --&gt; MINIO
+  WK --&gt; VAULT
+  APIS --&gt; VAULT
+  SCHED --&gt; MQ
+  WK -- &quot;egress allow-list&quot; --&gt; NSR
+  WK -- &quot;egress allow-list&quot; --&gt; STATE
+  WK -- &quot;mTLS&quot; --&gt; SR1
+  SR1 -- &quot;replication&quot; --&gt; SR2
+  SCHED -- &quot;read probe&quot; --&gt; SR2
+  APIS --&gt; OTEL
+  WK --&gt; OTEL
+  OTEL --&gt; PROM
+  OTEL --&gt; LOKI</pre></details>
+</section>
+<!-- MERMAID:END -->
+</div>
+<div id="tip" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="schema.js"></script>
+<script src="engine.js"></script>
+<script src="ui-terms.js"></script>
+<script src="app.js"></script>

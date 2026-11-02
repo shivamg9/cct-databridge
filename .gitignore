@@ -1,0 +1,7 @@
+# Record stores and access logs may hold personal data; never commit them.
+server/data/
+*.access-log.jsonl
+*.json.tmp
+.env
+.env.*
+node_modules/

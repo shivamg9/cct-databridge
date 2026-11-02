@@ -1,0 +1,63 @@
+%% H. Deployment (recommended). [P] = implemented in this prototype as a browser simulation; [R] = recommendation only.
+flowchart TB
+  subgraph Users["Users"]
+    B["Browser<br/>[P] prototype console"]
+  end
+  subgraph K8s["Kubernetes cluster, RKE2 [R]"]
+    subgraph Edge["Ingress"]
+      ING["Nginx / Istio gateway<br/>TLS 1.3, WAF"]
+    end
+    subgraph App["databridge namespace"]
+      WEB["Web UI pods<br/>React static"]
+      APIS["API service pods<br/>FastAPI, 2+ replicas"]
+      WK["Worker pods<br/>Celery, HPA on queue depth"]
+      SCHED["Scheduler<br/>retry + replica monitor"]
+    end
+    subgraph Shared["Shared services"]
+      MQ[("RabbitMQ<br/>jobs, retry, DLQ")]
+      RED[("Redis<br/>locks, rate budgets")]
+      KC["Keycloak"]
+    end
+    subgraph Obs["Monitoring"]
+      OTEL["OpenTelemetry collector"]
+      PROM["Prometheus + Grafana"]
+      LOKI["Loki"]
+    end
+  end
+  subgraph Data["Managed data [R]"]
+    PG[("PostgreSQL<br/>metadata, runs, audit")]
+    MINIO[("MinIO / S3<br/>quarantine, staging, reject")]
+    VAULT["Vault + KMS"]
+  end
+  subgraph Ext["External source systems"]
+    NSR["NASSCO NSR API<br/>[P] mock adapter"]
+    STATE["State registries<br/>[P] mock adapter"]
+  end
+  subgraph Reg["OpenG2P registry deployment"]
+    SR1[("MASTER_SR1<br/>partner-api /partner/ingest_data<br/>[P] simulated store")]
+    SR2[("MASTER_SR2 replica<br/>[P] simulated replica")]
+  end
+
+  B --> ING
+  ING --> WEB
+  ING --> APIS
+  APIS --> KC
+  APIS --> PG
+  APIS --> MQ
+  APIS --> MINIO
+  WK --> MQ
+  WK --> RED
+  WK --> PG
+  WK --> MINIO
+  WK --> VAULT
+  APIS --> VAULT
+  SCHED --> MQ
+  WK -- "egress allow-list" --> NSR
+  WK -- "egress allow-list" --> STATE
+  WK -- "mTLS" --> SR1
+  SR1 -- "replication" --> SR2
+  SCHED -- "read probe" --> SR2
+  APIS --> OTEL
+  WK --> OTEL
+  OTEL --> PROM
+  OTEL --> LOKI
