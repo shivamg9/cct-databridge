@@ -1,0 +1,48 @@
+# Local demo stack: http://localhost:8080 (console) and http://localhost:8080/api/v1 (API).
+#   docker compose up --build -d     start
+#   docker compose logs -f           follow logs
+#   docker compose down              stop (records are kept in the named volume)
+name: cct-databridge
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cct-databridge-backend:local
+    environment:
+      # Fixed here so .env cannot switch it: integration mode is never enabled automatically.
+      DATABRIDGE_MODE: demo
+      HOST: 0.0.0.0
+      PORT: "8080"
+      DATABRIDGE_DATA_FILE: /data/demo-records.json
+      DATABRIDGE_API_KEY: ${DATABRIDGE_API_KEY:?Set DATABRIDGE_API_KEY in .env (see .env.example)}
+      # DATABRIDGE_FULL_ACCESS_KEY is deliberately not passed: pull stays masked.
+    volumes:
+      - databridge-data:/data
+    expose:
+      - "8080"            # reachable only from the frontend on the compose network; no host port
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    image: cct-databridge-frontend:local
+    ports:
+      - "127.0.0.1:8080:8080"   # localhost only
+    depends_on:
+      backend:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    restart: unless-stopped
+
+volumes:
+  databridge-data:

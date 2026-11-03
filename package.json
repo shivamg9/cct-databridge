@@ -7,6 +7,6 @@
   "scripts": {
     "start": "node server/api.js",
     "start:demo": "node server/api.js --seed-demo",
-    "test": "node --test tests/"
+    "test": "node --test"
   }
 }

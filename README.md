@@ -42,8 +42,79 @@ Rebuild the generated files after changing the build sheet or any diagram:
 
 ```bash
 python -I scripts/build.py ../NSR_Registry_Build_Sheet.xlsx   # needs openpyxl
-node --test tests/                                            # 26 engine + 11 terminology + 18 API + 8 UI tests, Node 18+
+node --test                                                  # 26 engine + 11 terminology + 18 API + 8 UI tests, Node 18+
 ```
+
+`node --test` with no argument finds `tests/*.test.js` on Node 18–22. Avoid `node --test tests/`: from Node 21 it treats `tests/` as a file and fails. The 8 UI tests need jsdom and are reported as skipped without it.
+
+## Run with Docker Desktop (local demo)
+
+Two containers on one Compose network:
+
+| Container | Image | Role | Reachable at |
+|---|---|---|---|
+| `frontend` | `nginx:alpine` | Serves `prototype/` and proxies `/api/` to the backend | `http://localhost:8080` (localhost only) |
+| `backend` | `node:22-alpine` | `node server/api.js --seed-demo`, demo mode, records on the `databridge-data` volume | Compose network only; no host port |
+
+**Two separate components.** The console's ingestion (*Add Records*, transfers, exceptions) runs entirely in the browser on simulated data and does not call the API. The API is a separate service with its own record store. Records pushed to the API do not appear in the console, and the reverse.
+
+**Prerequisites:** Docker Desktop running (Linux containers), and Node 18+ on the host to generate a key.
+
+**1. Configure `.env`** (once). It is git-ignored and never copied into an image.
+
+```powershell
+Copy-Item .env.example .env
+$key = node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+(Get-Content .env) -replace '^DATABRIDGE_API_KEY=.*', "DATABRIDGE_API_KEY=$key" | Set-Content .env
+```
+
+The stack always runs in **demo mode**: only synthetic records are accepted (`synthetic` must be true, and NINs must start with `99`). No full-access key is configured, so pull is always masked. The mode is fixed in `docker-compose.yml` and cannot be switched from `.env`. Integration mode is a separate, deliberate setup (see [docs/api/openg2p-integration.md](docs/api/openg2p-integration.md)).
+
+**2. Build and start**
+
+```powershell
+docker compose up --build -d
+docker compose ps          # both services should show (healthy)
+```
+
+| What | URL |
+|---|---|
+| Console | http://localhost:8080 |
+| API health | http://localhost:8080/api/v1/health |
+| Push / pull | http://localhost:8080/api/v1/records (header `X-API-Key`) |
+
+**3. Test push and pull** (PowerShell; `curl.exe`, not the `curl` alias)
+
+```powershell
+$key = (Select-String -Path .env -Pattern '^DATABRIDGE_API_KEY=(.+)$').Matches[0].Groups[1].Value
+curl.exe -s http://localhost:8080/api/v1/health
+# Push the synthetic sample: 201 CREATED, then 200 UNCHANGED when repeated
+curl.exe -s -X POST http://localhost:8080/api/v1/records -H "X-API-Key: $key" -H "Content-Type: application/json" --data "@docs/samples/openg2p-push-record.json"
+# Pull: masked ("nin": "*******1035")
+curl.exe -s "http://localhost:8080/api/v1/records?page_size=5" -H "X-API-Key: $key"
+```
+
+**4. Logs, stop, restart**
+
+```powershell
+docker compose logs -f              # all services; or: docker compose logs -f backend
+docker compose restart              # restart; records are kept
+docker compose down                 # stop and remove containers; the volume (records) is kept
+docker compose up -d                # start again with the same records
+```
+
+**Reset local data (deliberately).** This deletes every record in the volume. The next start re-seeds 30 synthetic records.
+
+```powershell
+docker compose down -v
+```
+
+**Limitations of the local demo**
+
+- Plain HTTP on localhost. There is no TLS, and the API key travels unencrypted (acceptable only on this machine).
+- One backend process with a JSON-file store, which is not suitable for concurrent instances or large volumes ([storage limits](docs/api/openg2p-integration.md)).
+- The console needs internet access for Excel parsing (SheetJS from cdnjs) and for the System Details diagrams (Mermaid). CSV uploads and demo files work offline.
+- No OpenG2P, NASSCO or state registry is contacted. Everything is synthetic.
 
 ## OpenG2P push and pull API
 
@@ -112,6 +183,9 @@ See [docs/api/openg2p-handoff.md](docs/api/openg2p-handoff.md) (the short handof
 
 ```
 cct-databridge/
+  Dockerfile           backend image (node:22-alpine, demo mode, /data volume)
+  docker/              frontend.Dockerfile (nginx:alpine) and nginx.conf (serves prototype/, proxies /api/)
+  docker-compose.yml   local stack; .env.example lists the one setting (DATABRIDGE_API_KEY)
   prototype/
     index.html         shell, styles, injected Mermaid diagrams
     app.js             UI (vanilla JS, escaped templating)

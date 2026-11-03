@@ -4,4 +4,9 @@ server/data/
 *.json.tmp
 .env
 .env.*
+!.env.example
 node_modules/
+# Local secrets and keys
+*.pem
+*.key
+secrets/

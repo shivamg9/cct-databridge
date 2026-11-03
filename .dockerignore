@@ -1,0 +1,16 @@
+# Keep secrets, local data and anything not needed at runtime out of the build context.
+.git
+.gitignore
+.env
+.env.*
+server/data/
+*.access-log.jsonl
+*.json.tmp
+node_modules/
+*.zip
+tests/
+scripts/
+templates/
+docs/
+README.md
+docker-compose.yml
