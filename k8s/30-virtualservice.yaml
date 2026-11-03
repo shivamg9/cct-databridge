@@ -1,0 +1,27 @@
+# Public entry: https://databridge.openg2p.dpiforall.com  (console at /, API at /api/v1/...)
+# Uses the cluster's existing Istio gateway dev/internal (*.openg2p.dpiforall.com), like nsr-staff-portal-ui.
+# TLS is already terminated in front of the gateway, so nothing TLS-related is needed here.
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: databridge
+  namespace: cct-databridge
+spec:
+  gateways:
+    - dev/internal
+  hosts:
+    - databridge.openg2p.dpiforall.com
+  http:
+    - headers:
+        request:
+          set:
+            x-forwarded-host: databridge.openg2p.dpiforall.com
+            x-forwarded-proto: https
+      match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: databridge-frontend.cct-databridge.svc.cluster.local
+            port:
+              number: 80

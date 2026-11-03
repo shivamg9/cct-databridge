@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: databridge-backend
+  namespace: cct-databridge
+  labels: { app.kubernetes.io/name: cct-databridge, app.kubernetes.io/component: backend }
+spec:
+  # JSON-file store on a RWO volume: exactly one replica, and Recreate so two pods never share the file.
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: cct-databridge, app.kubernetes.io/component: backend }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: cct-databridge, app.kubernetes.io/component: backend }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000        # "node" user in node:22-alpine
+        runAsGroup: 1000
+        fsGroup: 1000          # makes the PVC writable by the node user
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: backend
+          image: cct-databridge-backend:0.5.0     # overridden by kustomization.yaml "images:"
+          imagePullPolicy: IfNotPresent
+          args: ["node", "server/api.js", "--seed-demo"]
+          ports:
+            - { name: http, containerPort: 8080 }
+          env:
+            - { name: NODE_ENV, value: production }
+            # Same guardrail as docker-compose.yml: demo mode only (synthetic records).
+            - { name: DATABRIDGE_MODE, value: demo }
+            - { name: HOST, value: "0.0.0.0" }
+            - { name: PORT, value: "8080" }
+            - { name: DATABRIDGE_DATA_FILE, value: /data/demo-records.json }
+            - name: DATABRIDGE_API_KEY
+              valueFrom:
+                secretKeyRef: { name: databridge-secrets, key: DATABRIDGE_API_KEY }
+          readinessProbe:
+            httpGet: { path: /api/v1/health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /api/v1/health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: databridge-data }
+        - name: tmp
+          emptyDir: {}
+---
+# Named "backend" on purpose: the frontend image's nginx.conf proxies /api/ to http://backend:8080.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: cct-databridge
+  labels: { app.kubernetes.io/name: cct-databridge, app.kubernetes.io/component: backend }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: cct-databridge, app.kubernetes.io/component: backend }
+  ports:
+    - { name: http, port: 8080, targetPort: http }

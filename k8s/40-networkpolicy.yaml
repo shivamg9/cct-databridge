@@ -1,0 +1,43 @@
+# Deny all inbound traffic in the namespace except: ingress controller -> frontend, frontend -> backend.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: cct-databridge
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-from-ingress-controller
+  namespace: cct-databridge
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/component: frontend }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              # Istio ingress gateway pods (istio-system) send the public traffic.
+              kubernetes.io/metadata.name: istio-system
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-from-frontend
+  namespace: cct-databridge
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/component: backend }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/component: frontend }
+      ports:
+        - { protocol: TCP, port: 8080 }

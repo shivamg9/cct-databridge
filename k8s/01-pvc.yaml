@@ -1,0 +1,12 @@
+# Backend record store (one JSON file). ReadWriteOnce: only one backend pod may run at a time.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: databridge-data
+  namespace: cct-databridge
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: nfs-csi      # cluster default (NFS on 172.31.58.104:/srv/nfs/openg2p)
