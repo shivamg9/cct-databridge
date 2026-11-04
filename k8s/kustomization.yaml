@@ -12,7 +12,7 @@ resources:
 images:
   - name: cct-databridge-backend
     newName: oorudigital/cct-databridge-backend
-    newTag: "0.5.0"
+    newTag: "0.6.0"
   - name: cct-databridge-frontend
     newName: oorudigital/cct-databridge-frontend
     newTag: "0.5.0"

@@ -24,7 +24,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: backend
-          image: cct-databridge-backend:0.5.0     # overridden by kustomization.yaml "images:"
+          image: cct-databridge-backend:0.6.0     # overridden by kustomization.yaml "images:"
           imagePullPolicy: IfNotPresent
           args: ["node", "server/api.js", "--seed-demo"]
           ports:
@@ -36,6 +36,9 @@ spec:
             - { name: HOST, value: "0.0.0.0" }
             - { name: PORT, value: "8080" }
             - { name: DATABRIDGE_DATA_FILE, value: /data/demo-records.json }
+            # Demo only: pull returns stored synthetic values. "false" restores masked pulls.
+            # The server refuses to start with this set to "true" in integration mode.
+            - { name: DATABRIDGE_UNMASKED_PULL, value: "true" }
             - name: DATABRIDGE_API_KEY
               valueFrom:
                 secretKeyRef: { name: databridge-secrets, key: DATABRIDGE_API_KEY }

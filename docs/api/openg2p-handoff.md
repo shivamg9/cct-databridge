@@ -67,17 +67,18 @@ Other rules:
 {
   "view": "masked",
   "items": [{
-    "record": { "internal_record_id": "SR1-0000001", "given_name": "C******", "birth_date": "1990-**-**", "nin": "*******1035", "gender": "1", "…": "…" },
+    "record": { "internal_record_id": "SR1-0000001", "given_name": "C******", "birth_date": "1990-**-**", "nin": "*******1035", "gender": "1", "pregnant": null, "…": "all 145 fields", "other_group_specify": null },
     "meta": { "version": 1, "received_at": "2026-11-01T17:40:40.014Z", "updated_at": "2026-11-01T17:40:40.014Z", "origin": "databridge-ingestion" }
   }],
   "page": 1, "page_size": 50, "total": 31, "has_more": false
 }
 ```
 
-- **Records are masked.**
+- **Every record has all 145 fields**, in build-sheet order. A field with no value is `null`.
+- **Records are masked** (the live demo shows unmasked synthetic values instead; `"view"` tells you which).
   - NIN, BVN and account details show the last 4 characters.
   - Names, address, phone and date of birth are partly masked.
-  - Health and religion fields are left out.
+  - Health and religion fields are `null`.
   - Unmasked access is a separate key that we issue only after the data owner approves it.
 - **Sync loop:**
   1. Call with `updated_since=<watermark>`.

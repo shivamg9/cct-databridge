@@ -9,6 +9,8 @@
 //       PORT (8080), HOST (127.0.0.1)
 //       DATABRIDGE_API_KEY           standard key: push, and masked pull (required in integration mode)
 //       DATABRIDGE_FULL_ACCESS_KEY   optional second key: unmasked pull, with an X-Access-Purpose header
+//       DATABRIDGE_UNMASKED_PULL     true | false (default). Demo mode only: the standard key pulls
+//                                    stored (synthetic) values unmasked. Refused in integration mode.
 //       DATABRIDGE_DATA_FILE         default server/data/<mode>-records.json
 //       DATABRIDGE_ACCESS_LOG        default <data file>.access-log.jsonl (one line per unmasked pull)
 'use strict';
@@ -21,6 +23,7 @@ const { pushRecord, pullRecords, createStore, seedFromIngestion } = require('./r
 const MAX_BODY = 64 * 1024;
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
 const MODES = ['demo', 'integration'];
+const UNMASKED_DEMO_ONLY = 'DATABRIDGE_UNMASKED_PULL is for demo mode only; in integration mode unmasked pull needs DATABRIDGE_FULL_ACCESS_KEY and X-Access-Purpose.';
 
 // Reads settings from the environment and refuses unsafe combinations.
 function configFromEnv(env, argv) {
@@ -36,8 +39,12 @@ function configFromEnv(env, argv) {
   if (fullAccessKey && !apiKey) throw new Error('DATABRIDGE_FULL_ACCESS_KEY needs DATABRIDGE_API_KEY as well.');
   if (fullAccessKey && fullAccessKey === apiKey) throw new Error('DATABRIDGE_FULL_ACCESS_KEY must differ from DATABRIDGE_API_KEY.');
   if (mode === 'integration' && seedDemo) throw new Error('--seed-demo is for demo mode only; it would mix synthetic records into the integration store.');
+  const unmaskedRaw = String(env.DATABRIDGE_UNMASKED_PULL || 'false').trim().toLowerCase();
+  if (!['true', 'false'].includes(unmaskedRaw)) throw new Error('DATABRIDGE_UNMASKED_PULL must be true or false.');
+  const unmaskedPull = unmaskedRaw === 'true';
+  if (unmaskedPull && mode !== 'demo') throw new Error(UNMASKED_DEMO_ONLY);
   const dataFile = env.DATABRIDGE_DATA_FILE || path.join(__dirname, 'data', `${mode}-records.json`);
-  return { mode, host, port: Number(env.PORT || 8080), apiKey, fullAccessKey, seedDemo, dataFile, accessLog: env.DATABRIDGE_ACCESS_LOG || `${dataFile}.access-log.jsonl` };
+  return { mode, host, port: Number(env.PORT || 8080), apiKey, fullAccessKey, unmaskedPull, seedDemo, dataFile, accessLog: env.DATABRIDGE_ACCESS_LOG || `${dataFile}.access-log.jsonl` };
 }
 
 function createServer(opts) {
@@ -49,6 +56,9 @@ function createServer(opts) {
   }
   const apiKey = opts.apiKey || null;
   const fullAccessKey = opts.fullAccessKey || null;
+  // Demo stores hold synthetic records only (checked above), so this never reveals real data.
+  const unmaskedPull = opts.unmaskedPull === true;
+  if (unmaskedPull && mode !== 'demo') throw new Error(UNMASKED_DEMO_ONLY);
 
   function send(res, status, body, headers) {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Trace-Id': res.traceId, ...(headers || {}) });
@@ -100,7 +110,8 @@ function createServer(opts) {
       purpose = String(req.headers['x-access-purpose'] || '').trim().slice(0, 200);
       if (purpose.length < 10) return fail(res, 400, 'PURPOSE_REQUIRED', 'Unmasked pull needs an X-Access-Purpose header (at least 10 characters)');
     }
-    const out = pullRecords(store, Object.fromEntries(url.searchParams), { view: level === 'full' ? 'full' : 'masked' });
+    // The full-access key keeps its purpose check and access log even when demo unmasked pull is on.
+    const out = pullRecords(store, Object.fromEntries(url.searchParams), { view: level === 'full' || unmaskedPull ? 'full' : 'masked' });
     if (!out.ok) return fail(res, 400, 'INVALID_QUERY', 'Invalid query parameters', out.errors);
     if (purpose && opts.accessLog) {
       // Who saw unmasked data, when and why. Record IDs only, never values.
@@ -147,7 +158,9 @@ if (require.main === module) {
     console.log(`CCT DataBridge API (${cfg.mode} mode) on http://${cfg.host}:${cfg.port}/api/v1/records · store ${cfg.dataFile}`);
     if (!cfg.apiKey) console.log('DATABRIDGE_API_KEY not set: no authentication (local use only).');
     if (cfg.mode === 'demo') console.log('Demo mode: records with synthetic=false are rejected.');
-    console.log(cfg.fullAccessKey ? `Unmasked pull enabled for the full-access key; logged to ${cfg.accessLog}` : 'Pull returns masked records only (no full-access key configured).');
+    if (cfg.unmaskedPull) console.log('Demo unmasked pull is on (DATABRIDGE_UNMASKED_PULL=true): pull returns stored synthetic values.');
+    if (cfg.fullAccessKey) console.log(`Unmasked pull enabled for the full-access key; logged to ${cfg.accessLog}`);
+    else if (!cfg.unmaskedPull) console.log('Pull returns masked records only (no full-access key configured).');
   });
 }
 

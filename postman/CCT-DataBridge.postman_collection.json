@@ -1,0 +1,2311 @@
+{
+  "info": {
+    "name": "CCT DataBridge API",
+    "description": "Push/pull API for the OpenG2P integration.\n\nSetup: select an environment and set api_key (Current value only, so it is never synced). For the live demo, get it on the server with:\n  k -n cct-databridge get secret databridge-secrets -o jsonpath='{.data.DATABRIDGE_API_KEY}' | base64 -d\n\nexpected_view in the environment says what pull should return: \"full\" when the server runs with DATABRIDGE_UNMASKED_PULL=true (demo), \"masked\" otherwise.\n\nRun the whole collection in order (Runner). \"02 Push\" creates fresh synthetic records with IDs PM-TEST-<timestamp> on every run; later folders depend on them. Demo mode accepts synthetic data only (synthetic=true, NINs starting with 99), so never put real beneficiary data here.\n\n\"08 Integration mode\" runs only against a server in integration mode (use the \"Local Integration\" environment with full_access_key set); elsewhere it is skipped. Folder 07 needs the nginx frontend, so leave it out for a bare API server.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "sample_record",
+      "value": "{\"internal_record_id\":\"OG2P-IND-000001\",\"nsr_household_serial\":\"NSR-HH-000151\",\"household_address\":\"72 Market Road\",\"consent_to_share_data\":true,\"state_id\":\"NG-OY\",\"state_name\":\"Oyo\",\"lga_id\":\"OY-LGA-12\",\"lga_name\":\"Ibadan North\",\"ward\":\"Ward 9\",\"community\":\"Ward 9 Community\",\"latitude\":7.44637,\"longitude\":3.96521,\"accuracy_m\":6.4,\"coordinate_source\":\"NSR field enumeration\",\"given_name\":\"Chinedu\",\"family_name\":\"Eze\",\"birth_date\":\"1990-11-25\",\"gender\":\"1\",\"phone_number\":\"+2348010038295\",\"relationship_to_head\":\"1\",\"marital_status\":\"1\",\"has_valid_nin\":true,\"nin_type\":\"1\",\"nin\":\"99000001035\",\"account_number\":\"2000017595\",\"bank_name\":\"8\",\"account_name\":\"Chinedu Eze\",\"bvn\":\"22000013455\",\"roof_material\":\"1\",\"rooms_occupied\":4,\"synthetic\":true,\"is_household_head\":true,\"geo_lowest_level_value_id\":\"OY-LGA-12/WARD-9\",\"geo_code_hierarchy_json\":{\"country\":\"NG\",\"state\":\"NG-OY\",\"lga\":\"OY-LGA-12\",\"ward\":\"Ward 9\"},\"household_name\":\"Chinedu Eze\",\"member_count\":4,\"coordinate_verified\":false}"
+    },
+    {
+      "key": "canonical_fields",
+      "value": "[\"internal_record_id\",\"record_status\",\"country_code\",\"data_source\",\"synthetic\",\"nsr_household_serial\",\"household_name\",\"member_count\",\"household_address\",\"consent_to_share_data\",\"survey_sponsor\",\"survey_sponsor_other\",\"enumerator_id\",\"zone_id\",\"zone_name\",\"state_id\",\"state_name\",\"lga_id\",\"lga_name\",\"ward\",\"community\",\"rural_urban\",\"latitude\",\"longitude\",\"accuracy_m\",\"coordinate_source\",\"coordinate_verified\",\"administrative_level\",\"code_system\",\"geo_lowest_level_value_id\",\"geo_code_hierarchy_json\",\"main_livelihood\",\"main_livelihood_other\",\"monthly_income\",\"shock_affected\",\"shock_types\",\"shock_other\",\"shock_year\",\"coping_mechanisms\",\"coping_other\",\"coping_year\",\"health_insurance_covered\",\"health_insurance_type\",\"health_insurance_other\",\"asset_radio\",\"asset_touchlight\",\"asset_kerosenestove\",\"asset_television\",\"asset_mobilephone\",\"asset_landphone\",\"asset_housecurrent\",\"asset_houseelsewhere\",\"asset_landforhousing\",\"asset_farmland\",\"asset_bird\",\"asset_goat\",\"asset_cattle\",\"asset_bicycle\",\"asset_motocycle\",\"asset_car\",\"asset_canoe\",\"asset_boat\",\"asset_video_dvd\",\"asset_generator\",\"asset_iron_electric\",\"asset_iron_charcoal\",\"asset_fan\",\"asset_air_conditioner\",\"asset_refrigerator\",\"asset_freezer\",\"asset_furniture_sofa\",\"asset_furniture_table\",\"asset_hifi\",\"asset_mattress\",\"asset_bed\",\"asset_computer\",\"asset_wash_machine\",\"crops_grown\",\"crops_other_specify\",\"roof_material\",\"floor_material\",\"lighting_source\",\"cooking_fuel\",\"drinking_water_source\",\"toilet_type\",\"toilet_device_type\",\"rooms_occupied\",\"given_name\",\"family_name\",\"additional_name\",\"birth_date\",\"birth_date_estimated\",\"gender\",\"phone_number\",\"marital_status\",\"birth_certificate\",\"email\",\"nsr_number\",\"relationship_to_head\",\"is_household_head\",\"has_valid_nin\",\"nin_type\",\"nin\",\"nin_tracking_number\",\"nin_surname\",\"nin_firstname\",\"nin_othername\",\"account_number\",\"bank_name\",\"bank_name_other\",\"account_name\",\"bvn\",\"employment_status\",\"work_sector\",\"work_subsector\",\"work_other_specify\",\"educational_qualification\",\"currently_enrolled\",\"current_grade\",\"last_grade_completed\",\"month_left_school\",\"year_left_school\",\"school_travel_time\",\"pregnant\",\"lactating\",\"uses_health_facility\",\"health_centre_travel_time\",\"muac\",\"nutrition_programmes\",\"has_severe_disability\",\"difficulty_seeing\",\"difficulty_hearing\",\"difficulty_walking\",\"difficulty_remembering\",\"difficulty_self_care\",\"difficulty_communicating\",\"chronically_ill\",\"chronic_illness_types\",\"chronic_illness_other\",\"member_cooperative\",\"member_religious_group\",\"member_business_group\",\"member_age_group\",\"member_other_group\",\"other_group_specify\"]"
+    },
+    {
+      "key": "system_defaults",
+      "value": "[\"record_status\",\"country_code\",\"data_source\",\"synthetic\"]"
+    },
+    {
+      "key": "expected_view",
+      "value": "full"
+    },
+    {
+      "key": "server_mode",
+      "value": ""
+    },
+    {
+      "key": "record_id",
+      "value": ""
+    },
+    {
+      "key": "run_started",
+      "value": ""
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Every API response carries a trace ID; errors repeat it in the body.",
+          "if (pm.request.url.getPath().startsWith('/api/')) {",
+          "  pm.test('Has X-Trace-Id', () => pm.expect(pm.response.headers.get('X-Trace-Id')).to.match(/^tr-[0-9a-f]{16}$/));",
+          "  pm.test('Cache-Control no-store', () => pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'));",
+          "  let b; try { b = pm.response.json(); } catch (e) {}",
+          "  if (b && b.error) pm.test('Error traceId matches header', () => pm.expect(b.error.traceId).to.eql(pm.response.headers.get('X-Trace-Id')));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Health and access",
+      "description": "No key needed for health. Every /api/v1/records call needs X-API-Key.",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('status ok', () => pm.expect(b.status).to.eql('ok'));",
+                  "pm.test('mode is demo or integration', () => pm.expect(['demo', 'integration']).to.include(b.mode));",
+                  "pm.test('Nothing but status and mode', () => pm.expect(Object.keys(b).sort()).to.eql(['mode', 'status']));",
+                  "pm.collectionVariables.set('server_mode', b.mode);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health - wrong method (405)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 405', () => pm.response.to.have.status(405));",
+                  "pm.test('Allow: GET', () => pm.expect(pm.response.headers.get('Allow')).to.eql('GET'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pull - no key (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('UNAUTHORISED', () => pm.expect(pm.response.json().error.code).to.eql('UNAUTHORISED'));",
+                  "pm.test('No records leaked', () => pm.expect(pm.response.json()).to.not.have.property('items'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pull - wrong key (401)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "not-the-key"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('UNAUTHORISED', () => pm.expect(pm.response.json().error.code).to.eql('UNAUTHORISED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Push - no key (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"internal_record_id\": \"{{record_id}}\",\n  \"nsr_household_serial\": \"NSR-HH-000151\",\n  \"household_address\": \"72 Market Road\",\n  \"consent_to_share_data\": true,\n  \"state_id\": \"NG-OY\",\n  \"state_name\": \"Oyo\",\n  \"lga_id\": \"OY-LGA-12\",\n  \"lga_name\": \"Ibadan North\",\n  \"ward\": \"Ward 9\",\n  \"community\": \"Ward 9 Community\",\n  \"latitude\": 7.44637,\n  \"longitude\": 3.96521,\n  \"accuracy_m\": 6.4,\n  \"coordinate_source\": \"NSR field enumeration\",\n  \"given_name\": \"Chinedu\",\n  \"family_name\": \"Eze\",\n  \"birth_date\": \"1990-11-25\",\n  \"gender\": \"1\",\n  \"phone_number\": \"+2348010038295\",\n  \"relationship_to_head\": \"1\",\n  \"marital_status\": \"1\",\n  \"has_valid_nin\": true,\n  \"nin_type\": \"1\",\n  \"nin\": \"99000001035\",\n  \"account_number\": \"2000017595\",\n  \"bank_name\": \"8\",\n  \"account_name\": \"Chinedu Eze\",\n  \"bvn\": \"22000013455\",\n  \"roof_material\": \"1\",\n  \"rooms_occupied\": 4,\n  \"synthetic\": true,\n  \"is_household_head\": true,\n  \"geo_lowest_level_value_id\": \"OY-LGA-12/WARD-9\",\n  \"geo_code_hierarchy_json\": {\n    \"country\": \"NG\",\n    \"state\": \"NG-OY\",\n    \"lga\": \"OY-LGA-12\",\n    \"ward\": \"Ward 9\"\n  },\n  \"household_name\": \"Chinedu Eze\",\n  \"member_count\": 4,\n  \"coordinate_verified\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Key is set",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?page_size=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "page_size",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Fails if api_key in the environment is empty or wrong. Fix it before running the rest."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('api_key accepted (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Push (create, repeat, update)",
+      "description": "Upsert keyed by internal_record_id. Identical repeat returns UNCHANGED; a change bumps the version.",
+      "item": [
+        {
+          "name": "Push - create (201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"internal_record_id\": \"{{record_id}}\",\n  \"nsr_household_serial\": \"NSR-HH-000151\",\n  \"household_address\": \"72 Market Road\",\n  \"consent_to_share_data\": true,\n  \"state_id\": \"NG-OY\",\n  \"state_name\": \"Oyo\",\n  \"lga_id\": \"OY-LGA-12\",\n  \"lga_name\": \"Ibadan North\",\n  \"ward\": \"Ward 9\",\n  \"community\": \"Ward 9 Community\",\n  \"latitude\": 7.44637,\n  \"longitude\": 3.96521,\n  \"accuracy_m\": 6.4,\n  \"coordinate_source\": \"NSR field enumeration\",\n  \"given_name\": \"Chinedu\",\n  \"family_name\": \"Eze\",\n  \"birth_date\": \"1990-11-25\",\n  \"gender\": \"1\",\n  \"phone_number\": \"+2348010038295\",\n  \"relationship_to_head\": \"1\",\n  \"marital_status\": \"1\",\n  \"has_valid_nin\": true,\n  \"nin_type\": \"1\",\n  \"nin\": \"99000001035\",\n  \"account_number\": \"2000017595\",\n  \"bank_name\": \"8\",\n  \"account_name\": \"Chinedu Eze\",\n  \"bvn\": \"22000013455\",\n  \"roof_material\": \"1\",\n  \"rooms_occupied\": 4,\n  \"synthetic\": true,\n  \"is_household_head\": true,\n  \"geo_lowest_level_value_id\": \"OY-LGA-12/WARD-9\",\n  \"geo_code_hierarchy_json\": {\n    \"country\": \"NG\",\n    \"state\": \"NG-OY\",\n    \"lga\": \"OY-LGA-12\",\n    \"ward\": \"Ward 9\"\n  },\n  \"household_name\": \"Chinedu Eze\",\n  \"member_count\": 4,\n  \"coordinate_verified\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// New ID per run so the create always returns 201.",
+                  "pm.collectionVariables.set('record_id', 'PM-TEST-' + Date.now());",
+                  "pm.collectionVariables.set('run_started', new Date(Date.now() - 5000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.test('CREATED, version 1', () => { pm.expect(b.status).to.eql('CREATED'); pm.expect(b.version).to.eql(1); });",
+                  "pm.test('Echoes the ID', () => pm.expect(b.internal_record_id).to.eql(pm.collectionVariables.get('record_id')));",
+                  "pm.test('Timestamps are ISO', () => { pm.expect(Date.parse(b.received_at)).to.be.a('number').and.not.NaN; pm.expect(b.updated_at).to.eql(b.received_at); });",
+                  "pm.test('No warnings', () => pm.expect(b.warnings).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Push - identical repeat (200 UNCHANGED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"internal_record_id\": \"{{record_id}}\",\n  \"nsr_household_serial\": \"NSR-HH-000151\",\n  \"household_address\": \"72 Market Road\",\n  \"consent_to_share_data\": true,\n  \"state_id\": \"NG-OY\",\n  \"state_name\": \"Oyo\",\n  \"lga_id\": \"OY-LGA-12\",\n  \"lga_name\": \"Ibadan North\",\n  \"ward\": \"Ward 9\",\n  \"community\": \"Ward 9 Community\",\n  \"latitude\": 7.44637,\n  \"longitude\": 3.96521,\n  \"accuracy_m\": 6.4,\n  \"coordinate_source\": \"NSR field enumeration\",\n  \"given_name\": \"Chinedu\",\n  \"family_name\": \"Eze\",\n  \"birth_date\": \"1990-11-25\",\n  \"gender\": \"1\",\n  \"phone_number\": \"+2348010038295\",\n  \"relationship_to_head\": \"1\",\n  \"marital_status\": \"1\",\n  \"has_valid_nin\": true,\n  \"nin_type\": \"1\",\n  \"nin\": \"99000001035\",\n  \"account_number\": \"2000017595\",\n  \"bank_name\": \"8\",\n  \"account_name\": \"Chinedu Eze\",\n  \"bvn\": \"22000013455\",\n  \"roof_material\": \"1\",\n  \"rooms_occupied\": 4,\n  \"synthetic\": true,\n  \"is_household_head\": true,\n  \"geo_lowest_level_value_id\": \"OY-LGA-12/WARD-9\",\n  \"geo_code_hierarchy_json\": {\n    \"country\": \"NG\",\n    \"state\": \"NG-OY\",\n    \"lga\": \"OY-LGA-12\",\n    \"ward\": \"Ward 9\"\n  },\n  \"household_name\": \"Chinedu Eze\",\n  \"member_count\": 4,\n  \"coordinate_verified\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('UNCHANGED, still version 1', () => { pm.expect(b.status).to.eql('UNCHANGED'); pm.expect(b.version).to.eql(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Push - update (200 UPDATED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "description": "Same record with rooms_occupied changed from 4 to 5.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"internal_record_id\": \"{{record_id}}\",\n  \"nsr_household_serial\": \"NSR-HH-000151\",\n  \"household_address\": \"72 Market Road\",\n  \"consent_to_share_data\": true,\n  \"state_id\": \"NG-OY\",\n  \"state_name\": \"Oyo\",\n  \"lga_id\": \"OY-LGA-12\",\n  \"lga_name\": \"Ibadan North\",\n  \"ward\": \"Ward 9\",\n  \"community\": \"Ward 9 Community\",\n  \"latitude\": 7.44637,\n  \"longitude\": 3.96521,\n  \"accuracy_m\": 6.4,\n  \"coordinate_source\": \"NSR field enumeration\",\n  \"given_name\": \"Chinedu\",\n  \"family_name\": \"Eze\",\n  \"birth_date\": \"1990-11-25\",\n  \"gender\": \"1\",\n  \"phone_number\": \"+2348010038295\",\n  \"relationship_to_head\": \"1\",\n  \"marital_status\": \"1\",\n  \"has_valid_nin\": true,\n  \"nin_type\": \"1\",\n  \"nin\": \"99000001035\",\n  \"account_number\": \"2000017595\",\n  \"bank_name\": \"8\",\n  \"account_name\": \"Chinedu Eze\",\n  \"bvn\": \"22000013455\",\n  \"roof_material\": \"1\",\n  \"rooms_occupied\": 5,\n  \"synthetic\": true,\n  \"is_household_head\": true,\n  \"geo_lowest_level_value_id\": \"OY-LGA-12/WARD-9\",\n  \"geo_code_hierarchy_json\": {\n    \"country\": \"NG\",\n    \"state\": \"NG-OY\",\n    \"lga\": \"OY-LGA-12\",\n    \"ward\": \"Ward 9\"\n  },\n  \"household_name\": \"Chinedu Eze\",\n  \"member_count\": 4,\n  \"coordinate_verified\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('UPDATED, version 2', () => { pm.expect(b.status).to.eql('UPDATED'); pm.expect(b.version).to.eql(2); });",
+                  "pm.test('updated_at moved on', () => pm.expect(Date.parse(b.updated_at)).to.be.above(Date.parse(b.received_at) - 1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Push - no consent (201 with warning)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "description": "Stored, but the response warns that downstream sharing must be restricted.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"internal_record_id\": \"{{record_id}}-NOCONSENT\",\n  \"nsr_household_serial\": \"NSR-HH-000151\",\n  \"household_address\": \"72 Market Road\",\n  \"consent_to_share_data\": false,\n  \"state_id\": \"NG-OY\",\n  \"state_name\": \"Oyo\",\n  \"lga_id\": \"OY-LGA-12\",\n  \"lga_name\": \"Ibadan North\",\n  \"ward\": \"Ward 9\",\n  \"community\": \"Ward 9 Community\",\n  \"latitude\": 7.44637,\n  \"longitude\": 3.96521,\n  \"accuracy_m\": 6.4,\n  \"coordinate_source\": \"NSR field enumeration\",\n  \"given_name\": \"Chinedu\",\n  \"family_name\": \"Eze\",\n  \"birth_date\": \"1990-11-25\",\n  \"gender\": \"1\",\n  \"phone_number\": \"+2348010038295\",\n  \"relationship_to_head\": \"1\",\n  \"marital_status\": \"1\",\n  \"has_valid_nin\": true,\n  \"nin_type\": \"1\",\n  \"nin\": \"99000001035\",\n  \"account_number\": \"2000017595\",\n  \"bank_name\": \"8\",\n  \"account_name\": \"Chinedu Eze\",\n  \"bvn\": \"22000013455\",\n  \"roof_material\": \"1\",\n  \"rooms_occupied\": 4,\n  \"synthetic\": true,\n  \"is_household_head\": true,\n  \"geo_lowest_level_value_id\": \"OY-LGA-12/WARD-9\",\n  \"geo_code_hierarchy_json\": {\n    \"country\": \"NG\",\n    \"state\": \"NG-OY\",\n    \"lga\": \"OY-LGA-12\",\n    \"ward\": \"Ward 9\"\n  },\n  \"household_name\": \"Chinedu Eze\",\n  \"member_count\": 4,\n  \"coordinate_verified\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('CONSENT_NOT_GIVEN warning', () => pm.expect(pm.response.json().warnings.map((w) => w.code)).to.include('CONSENT_NOT_GIVEN'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Pull (145 fields, paging, filters, values)",
+      "description": "Every record lists all 145 build-sheet fields; a field with no stored value is null. Oldest change first: keep the last updated_at you saw and send it as the next updated_since.",
+      "item": [
+        {
+          "name": "Pull - default page",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "const canonical = JSON.parse(pm.collectionVariables.get('canonical_fields'));",
+                  "pm.test('Schema lists 145 fields', () => pm.expect(canonical.length).to.eql(145));",
+                  "pm.test('Every record has exactly the 145 canonical fields', () => b.items.forEach((i) => pm.expect(Object.keys(i.record)).to.eql(canonical)));",
+                  "pm.test('meta is separate: version, received_at, updated_at, origin', () => b.items.forEach((i) => pm.expect(Object.keys(i.meta).sort()).to.eql(['origin', 'received_at', 'updated_at', 'version'])));",
+                  "pm.test('view matches expected_view', () => pm.expect(b.view).to.eql(pm.environment.get('expected_view') || pm.collectionVariables.get('expected_view')));",
+                  "pm.test('Paging fields', () => { pm.expect(b.page).to.eql(1); pm.expect(b.page_size).to.eql(50); pm.expect(b.total).to.be.a('number'); pm.expect(b.has_more).to.be.a('boolean'); });",
+                  "pm.test('Oldest change first', () => { const t = b.items.map((i) => i.meta.updated_at); pm.expect(t).to.eql([...t].sort()); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pull - page 2 of 5",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?page=2&page_size=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "2"
+                },
+                {
+                  "key": "page_size",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "const canonical = JSON.parse(pm.collectionVariables.get('canonical_fields'));",
+                  "pm.test('Schema lists 145 fields', () => pm.expect(canonical.length).to.eql(145));",
+                  "pm.test('Every record has exactly the 145 canonical fields', () => b.items.forEach((i) => pm.expect(Object.keys(i.record)).to.eql(canonical)));",
+                  "pm.test('meta is separate: version, received_at, updated_at, origin', () => b.items.forEach((i) => pm.expect(Object.keys(i.meta).sort()).to.eql(['origin', 'received_at', 'updated_at', 'version'])));",
+                  "pm.test('view matches expected_view', () => pm.expect(b.view).to.eql(pm.environment.get('expected_view') || pm.collectionVariables.get('expected_view')));",
+                  "pm.test('At most 5 items', () => pm.expect(b.items.length).to.be.at.most(5));",
+                  "pm.test('page 2, page_size 5', () => { pm.expect(b.page).to.eql(2); pm.expect(b.page_size).to.eql(5); });",
+                  "pm.test('has_more matches total', () => pm.expect(b.has_more).to.eql(10 < b.total));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pull - this run's record: values and nulls",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?updated_since={{run_started}}&changed_by=openg2p-push&page_size=200",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "updated_since",
+                  "value": "{{run_started}}"
+                },
+                {
+                  "key": "changed_by",
+                  "value": "openg2p-push"
+                },
+                {
+                  "key": "page_size",
+                  "value": "200"
+                }
+              ]
+            },
+            "description": "Finds the record pushed in 02. Full view: every pushed value comes back exactly; masked view: the build-sheet masking applies. Fields that were never pushed are null."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "const canonical = JSON.parse(pm.collectionVariables.get('canonical_fields'));",
+                  "pm.test('Schema lists 145 fields', () => pm.expect(canonical.length).to.eql(145));",
+                  "pm.test('Every record has exactly the 145 canonical fields', () => b.items.forEach((i) => pm.expect(Object.keys(i.record)).to.eql(canonical)));",
+                  "pm.test('meta is separate: version, received_at, updated_at, origin', () => b.items.forEach((i) => pm.expect(Object.keys(i.meta).sort()).to.eql(['origin', 'received_at', 'updated_at', 'version'])));",
+                  "pm.test('view matches expected_view', () => pm.expect(b.view).to.eql(pm.environment.get('expected_view') || pm.collectionVariables.get('expected_view')));",
+                  "const fullView = (pm.environment.get('expected_view') || pm.collectionVariables.get('expected_view')) === 'full';",
+                  "const it = b.items.find((i) => i.record.internal_record_id === pm.collectionVariables.get('record_id'));",
+                  "pm.test('Pushed record is returned', () => pm.expect(it).to.be.an('object'));",
+                  "if (it) {",
+                  "  const r = it.record;",
+                  "  const sent = Object.assign(JSON.parse(pm.collectionVariables.get('sample_record')), { internal_record_id: pm.collectionVariables.get('record_id'), rooms_occupied: 5 });",
+                  "  const defaults = JSON.parse(pm.collectionVariables.get('system_defaults'));",
+                  "  pm.test('meta: version 2, origin openg2p-push', () => { pm.expect(it.meta.version).to.eql(2); pm.expect(it.meta.origin).to.eql('openg2p-push'); });",
+                  "  pm.test('Fields never pushed are null', () => Object.keys(r).filter((k) => !(k in sent) && !defaults.includes(k)).forEach((k) => pm.expect(r[k], k).to.eql(null)));",
+                  "  pm.test('System defaults filled', () => { pm.expect(r.record_status).to.eql('ACTIVE'); pm.expect(r.country_code).to.eql('NG'); pm.expect(r.data_source).to.eql('OpenG2P'); });",
+                  "  pm.test('Low fields unchanged', () => { pm.expect(r.state_name).to.eql('Oyo'); pm.expect(r.rooms_occupied).to.eql(5); pm.expect(r.synthetic).to.eql(true); });",
+                  "  if (fullView) {",
+                  "    pm.test('Every pushed value returned exactly, types kept', () => Object.keys(sent).forEach((k) => pm.expect(r[k], k).to.eql(sent[k])));",
+                  "    pm.test('NIN, BVN unmasked', () => { pm.expect(r.nin).to.eql('99000001035'); pm.expect(r.bvn).to.eql('22000013455'); pm.expect(r.account_number).to.eql('2000017595'); });",
+                  "    pm.test('Phone, names, birth date unmasked', () => { pm.expect(r.phone_number).to.eql('+2348010038295'); pm.expect(r.given_name).to.eql('Chinedu'); pm.expect(r.family_name).to.eql('Eze'); pm.expect(r.birth_date).to.eql('1990-11-25'); });",
+                  "    pm.test('No asterisks anywhere', () => pm.expect(JSON.stringify(r)).to.not.include('***'));",
+                  "  } else {",
+                  "    pm.test('High: NIN, BVN, account number show last 4', () => { pm.expect(r.nin).to.eql('*******1035'); pm.expect(r.bvn).to.eql('*******3455'); pm.expect(r.account_number).to.eql('******7595'); });",
+                  "    pm.test('Medium: names first letter, birth year only', () => { pm.expect(r.given_name).to.eql('C******'); pm.expect(r.family_name).to.eql('E***'); pm.expect(r.birth_date).to.eql('1990-**-**'); });",
+                  "    pm.test('Medium numbers withheld as null: latitude, longitude', () => { pm.expect(r.latitude).to.eql(null); pm.expect(r.longitude).to.eql(null); });",
+                  "  }",
+                  "}",
+                  "pm.test('Every item changed after run_started', () => b.items.forEach((i) => pm.expect(Date.parse(i.meta.updated_at)).to.be.above(Date.parse(pm.collectionVariables.get('run_started')))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pull - changed_by=databridge-ingestion, 5 records",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?changed_by=databridge-ingestion&page_size=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "changed_by",
+                  "value": "databridge-ingestion"
+                },
+                {
+                  "key": "page_size",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Records last changed by DataBridge itself (the seeded demo records). OpenG2P uses changed_by=databridge-ingestion to avoid pulling back its own pushes."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "const canonical = JSON.parse(pm.collectionVariables.get('canonical_fields'));",
+                  "pm.test('Schema lists 145 fields', () => pm.expect(canonical.length).to.eql(145));",
+                  "pm.test('Every record has exactly the 145 canonical fields', () => b.items.forEach((i) => pm.expect(Object.keys(i.record)).to.eql(canonical)));",
+                  "pm.test('meta is separate: version, received_at, updated_at, origin', () => b.items.forEach((i) => pm.expect(Object.keys(i.meta).sort()).to.eql(['origin', 'received_at', 'updated_at', 'version'])));",
+                  "pm.test('view matches expected_view', () => pm.expect(b.view).to.eql(pm.environment.get('expected_view') || pm.collectionVariables.get('expected_view')));",
+                  "const fullView = (pm.environment.get('expected_view') || pm.collectionVariables.get('expected_view')) === 'full';",
+                  "pm.test('Five records when available', () => pm.expect(b.items.length).to.eql(Math.min(5, b.total)));",
+                  "pm.test('Does not include this run\\'s pushes', () => pm.expect(b.items.map((i) => i.record.internal_record_id).join(',')).to.not.include(pm.collectionVariables.get('record_id')));",
+                  "pm.test('Seeded records (SR1-...)', () => b.items.forEach((i) => pm.expect(i.record.internal_record_id).to.match(/^SR1-\\d{7}$/)));",
+                  "pm.test('Absent fields are null, not invented', () => b.items.forEach((i) => pm.expect(Object.values(i.record).filter((v) => v === null).length).to.be.above(0)));",
+                  "pm.test('Populated values keep their types', () => b.items.forEach((i) => { pm.expect(i.record.synthetic).to.eql(true); if (i.record.member_count !== null) pm.expect(i.record.member_count).to.be.a('number'); }));",
+                  "if (fullView) {",
+                  "  pm.test('Synthetic NINs unmasked (99 + 9 digits)', () => b.items.forEach((i) => { if (i.record.nin !== null) pm.expect(i.record.nin).to.match(/^99\\d{9}$/); }));",
+                  "  pm.test('BVN unmasked when present', () => b.items.forEach((i) => { if (i.record.bvn !== null) pm.expect(i.record.bvn).to.match(/^\\d{11}$/); }));",
+                  "  pm.test('Phone numbers and names unmasked when present', () => b.items.forEach((i) => ['phone_number', 'given_name', 'family_name', 'household_name'].forEach((k) => { if (i.record[k] !== null) pm.expect(i.record[k], k).to.not.include('*'); })));",
+                  "  pm.test('At least one NIN present', () => pm.expect(b.items.some((i) => i.record.nin !== null)).to.be.true);",
+                  "} else {",
+                  "  pm.test('NINs masked', () => b.items.forEach((i) => { if (i.record.nin !== null) pm.expect(i.record.nin).to.match(/^\\*+\\d{4}$/); }));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pull - changed_by=databridge-ingestion, page 2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?changed_by=databridge-ingestion&page=2&page_size=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "changed_by",
+                  "value": "databridge-ingestion"
+                },
+                {
+                  "key": "page",
+                  "value": "2"
+                },
+                {
+                  "key": "page_size",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "const canonical = JSON.parse(pm.collectionVariables.get('canonical_fields'));",
+                  "pm.test('Schema lists 145 fields', () => pm.expect(canonical.length).to.eql(145));",
+                  "pm.test('Every record has exactly the 145 canonical fields', () => b.items.forEach((i) => pm.expect(Object.keys(i.record)).to.eql(canonical)));",
+                  "pm.test('meta is separate: version, received_at, updated_at, origin', () => b.items.forEach((i) => pm.expect(Object.keys(i.meta).sort()).to.eql(['origin', 'received_at', 'updated_at', 'version'])));",
+                  "pm.test('view matches expected_view', () => pm.expect(b.view).to.eql(pm.environment.get('expected_view') || pm.collectionVariables.get('expected_view')));",
+                  "pm.test('Page 2', () => pm.expect(b.page).to.eql(2));",
+                  "pm.test('has_more matches total', () => pm.expect(b.has_more).to.eql(10 < b.total));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pull - nothing newer than now",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?updated_since=2999-01-01T00:00:00Z",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "updated_since",
+                  "value": "2999-01-01T00:00:00Z"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Empty page', () => { pm.expect(b.items).to.eql([]); pm.expect(b.total).to.eql(0); pm.expect(b.has_more).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Push validation errors",
+      "description": "Each request changes one thing in the sample record. 400 = wrong shape, 422 = failed a build-sheet rule. Nothing is stored.",
+      "item": [
+        {
+          "name": "Unknown field (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "description": "Only the 145 build-sheet attributes are accepted.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "r.favourite_colour = 'blue';",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code INVALID_REQUEST', () => pm.expect(e.code).to.eql('INVALID_REQUEST'));",
+                  "pm.test('Detail UNKNOWN_FIELD on favourite_colour', () => pm.expect(e.details.some((d) => d.code === 'UNKNOWN_FIELD' && d.field === 'favourite_colour')).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Array instead of object (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "description": "One record per request.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "pm.variables.set('bad_body', JSON.stringify([r])); return;",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code INVALID_REQUEST', () => pm.expect(e.code).to.eql('INVALID_REQUEST'));",
+                  "pm.test('Detail INVALID_BODY on null', () => pm.expect(e.details.some((d) => d.code === 'INVALID_BODY' && d.field === null)).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing internal_record_id (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "delete r.internal_record_id;",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code VALIDATION_FAILED', () => pm.expect(e.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('Detail REQUIRED_FIELD_MISSING on internal_record_id', () => pm.expect(e.details.some((d) => d.code === 'REQUIRED_FIELD_MISSING' && d.field === 'internal_record_id')).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing mandatory given_name (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "delete r.given_name;",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code VALIDATION_FAILED', () => pm.expect(e.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('Detail REQUIRED_FIELD_MISSING on given_name', () => pm.expect(e.details.some((d) => d.code === 'REQUIRED_FIELD_MISSING' && d.field === 'given_name')).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Real-looking NIN in demo mode (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "description": "Demo mode accepts synthetic NINs only (starting with 99). Skipped in integration mode.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('server_mode') !== 'demo') pm.execution.skipRequest(); // integration mode accepts this record",
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "r.nin = '12345678901';",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code VALIDATION_FAILED', () => pm.expect(e.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('Detail FIELD_VALIDATION_FAILED on nin', () => pm.expect(e.details.some((d) => d.code === 'FIELD_VALIDATION_FAILED' && d.field === 'nin')).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "synthetic=false in demo mode (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "description": "Skipped in integration mode.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('server_mode') !== 'demo') pm.execution.skipRequest(); // integration mode accepts this record",
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "r.synthetic = false;",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code VALIDATION_FAILED', () => pm.expect(e.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('Detail FIELD_VALIDATION_FAILED on synthetic', () => pm.expect(e.details.some((d) => d.code === 'FIELD_VALIDATION_FAILED' && d.field === 'synthetic')).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Impossible date 1990-02-31 (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "r.birth_date = '1990-02-31';",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code VALIDATION_FAILED', () => pm.expect(e.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('Detail INVALID_TYPE on birth_date', () => pm.expect(e.details.some((d) => d.code === 'INVALID_TYPE' && d.field === 'birth_date')).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gender not in code list (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "r.gender = '9';",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code VALIDATION_FAILED', () => pm.expect(e.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('Detail FIELD_VALIDATION_FAILED on gender', () => pm.expect(e.details.some((d) => d.code === 'FIELD_VALIDATION_FAILED' && d.field === 'gender')).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bad phone format (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "description": "Must match ^(\\+234|0)[789][01]\\d{8}$",
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "r.phone_number = 'abc';",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code VALIDATION_FAILED', () => pm.expect(e.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('Detail FIELD_VALIDATION_FAILED on phone_number', () => pm.expect(e.details.some((d) => d.code === 'FIELD_VALIDATION_FAILED' && d.field === 'phone_number')).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Masked value pushed back (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "description": "Stops a masked pull result from overwriting real data.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{bad_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = JSON.parse(pm.collectionVariables.get('sample_record'));",
+                  "r.internal_record_id = pm.collectionVariables.get('record_id') + '-NEG';",
+                  "r.nin = '*******1035';",
+                  "pm.variables.set('bad_body', JSON.stringify(r));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('Error code VALIDATION_FAILED', () => pm.expect(e.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('Detail MASKED_VALUE on nin', () => pm.expect(e.details.some((d) => d.code === 'MASKED_VALUE' && d.field === 'nin')).to.be.true);",
+                  "pm.test('Nothing stored', () => pm.expect(e.message).to.include('nothing was stored'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid JSON (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"internal_record_id\": \"PM-BROKEN\",",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('INVALID_JSON', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_JSON'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong Content-Type (415)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"internal_record_id\": \"{{record_id}}\",\n  \"nsr_household_serial\": \"NSR-HH-000151\",\n  \"household_address\": \"72 Market Road\",\n  \"consent_to_share_data\": true,\n  \"state_id\": \"NG-OY\",\n  \"state_name\": \"Oyo\",\n  \"lga_id\": \"OY-LGA-12\",\n  \"lga_name\": \"Ibadan North\",\n  \"ward\": \"Ward 9\",\n  \"community\": \"Ward 9 Community\",\n  \"latitude\": 7.44637,\n  \"longitude\": 3.96521,\n  \"accuracy_m\": 6.4,\n  \"coordinate_source\": \"NSR field enumeration\",\n  \"given_name\": \"Chinedu\",\n  \"family_name\": \"Eze\",\n  \"birth_date\": \"1990-11-25\",\n  \"gender\": \"1\",\n  \"phone_number\": \"+2348010038295\",\n  \"relationship_to_head\": \"1\",\n  \"marital_status\": \"1\",\n  \"has_valid_nin\": true,\n  \"nin_type\": \"1\",\n  \"nin\": \"99000001035\",\n  \"account_number\": \"2000017595\",\n  \"bank_name\": \"8\",\n  \"account_name\": \"Chinedu Eze\",\n  \"bvn\": \"22000013455\",\n  \"roof_material\": \"1\",\n  \"rooms_occupied\": 4,\n  \"synthetic\": true,\n  \"is_household_head\": true,\n  \"geo_lowest_level_value_id\": \"OY-LGA-12/WARD-9\",\n  \"geo_code_hierarchy_json\": {\n    \"country\": \"NG\",\n    \"state\": \"NG-OY\",\n    \"lga\": \"OY-LGA-12\",\n    \"ward\": \"Ward 9\"\n  },\n  \"household_name\": \"Chinedu Eze\",\n  \"member_count\": 4,\n  \"coordinate_verified\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 415', () => pm.response.to.have.status(415));",
+                  "pm.test('UNSUPPORTED_MEDIA_TYPE', () => pm.expect(pm.response.json().error.code).to.eql('UNSUPPORTED_MEDIA_TYPE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Body over 64 KB (413)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{big_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('big_body', JSON.stringify({ internal_record_id: 'PM-BIG', household_address: 'x'.repeat(70 * 1024) }));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 413', () => pm.response.to.have.status(413));",
+                  "pm.test('PAYLOAD_TOO_LARGE from the API', () => pm.expect(pm.response.json().error.code).to.eql('PAYLOAD_TOO_LARGE'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Pull query errors",
+      "description": "Bad query parameters return 400 INVALID_QUERY.",
+      "item": [
+        {
+          "name": "page_size over 200 (400)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?page_size=500",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "page_size",
+                  "value": "500"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('INVALID_QUERY', () => pm.expect(e.code).to.eql('INVALID_QUERY'));",
+                  "pm.test('Names the field page_size', () => pm.expect(e.details.map((d) => d.field)).to.include('page_size'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "page 0 (400)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?page=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('INVALID_QUERY', () => pm.expect(e.code).to.eql('INVALID_QUERY'));",
+                  "pm.test('Names the field page', () => pm.expect(e.details.map((d) => d.field)).to.include('page'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "updated_since not a date (400)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?updated_since=yesterday",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "updated_since",
+                  "value": "yesterday"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('INVALID_QUERY', () => pm.expect(e.code).to.eql('INVALID_QUERY'));",
+                  "pm.test('Names the field updated_since', () => pm.expect(e.details.map((d) => d.field)).to.include('updated_since'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "changed_by unknown (400)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?changed_by=someone-else",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "changed_by",
+                  "value": "someone-else"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json().error;",
+                  "pm.test('INVALID_QUERY', () => pm.expect(e.code).to.eql('INVALID_QUERY'));",
+                  "pm.test('Names the field changed_by', () => pm.expect(e.details.map((d) => d.field)).to.include('changed_by'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Routing",
+      "description": "Unknown paths and methods.",
+      "item": [
+        {
+          "name": "Unknown endpoint (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/beneficiaries",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "beneficiaries"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));",
+                  "pm.test('NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT records (405)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 405', () => pm.response.to.have.status(405));",
+                  "pm.test('Allow: GET, POST', () => pm.expect(pm.response.headers.get('Allow')).to.eql('GET, POST'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE records (405)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 405', () => pm.response.to.have.status(405));",
+                  "pm.test('Allow: GET, POST', () => pm.expect(pm.response.headers.get('Allow')).to.eql('GET, POST'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Operator console",
+      "description": "The web console served by the nginx frontend.",
+      "item": [
+        {
+          "name": "Console loads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": []
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('HTML', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html'));",
+                  "pm.test('Security headers', () => { pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); pm.expect(pm.response.headers.get('X-Frame-Options')).to.eql('DENY'); pm.expect(pm.response.headers.get('Referrer-Policy')).to.eql('no-referrer'); });",
+                  "pm.test('Title', () => pm.expect(pm.response.text()).to.include('CCT DataBridge'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Asset app.js",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/app.js",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "app.js"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JavaScript', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('javascript'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Asset engine.js",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/engine.js",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "engine.js"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JavaScript', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('javascript'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Asset schema.js",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/schema.js",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "schema.js"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JavaScript', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('javascript'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Asset ui-terms.js",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ui-terms.js",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ui-terms.js"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JavaScript', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('javascript'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing asset (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/does-not-exist.js",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "does-not-exist.js"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404, not the console page', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 Integration mode: full-access controls",
+      "description": "Runs only when Health reports mode=integration; skipped on demo servers. The standard key always gets the masked view; unmasked pull needs the separate full-access key AND an X-Access-Purpose header, and is written to the access log. DATABRIDGE_UNMASKED_PULL cannot be used in this mode (the server refuses to start).",
+      "item": [
+        {
+          "name": "Standard key gets masked view",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "X-Access-Purpose",
+                "value": "trying to get everything"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?page_size=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "page_size",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('server_mode') !== 'integration') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('view masked, even with a purpose header', () => pm.expect(b.view).to.eql('masked'));",
+                  "pm.test('No unmasked NIN', () => b.items.forEach((i) => { if (i.record.nin !== null) pm.expect(i.record.nin).to.match(/^\\*+\\d{4}$/); }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Full-access key without purpose (400)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{full_access_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('server_mode') !== 'integration') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('PURPOSE_REQUIRED', () => pm.expect(pm.response.json().error.code).to.eql('PURPOSE_REQUIRED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Full-access key with short purpose (400)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{full_access_key}}"
+              },
+              {
+                "key": "X-Access-Purpose",
+                "value": "test"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('server_mode') !== 'integration') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400 PURPOSE_REQUIRED', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('PURPOSE_REQUIRED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Full-access key with purpose gets full view",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{full_access_key}}"
+              },
+              {
+                "key": "X-Access-Purpose",
+                "value": "Postman integration check of unmasked pull"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/records?updated_since={{run_started}}&page_size=200",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "updated_since",
+                  "value": "{{run_started}}"
+                },
+                {
+                  "key": "page_size",
+                  "value": "200"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('server_mode') !== 'integration') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "const canonical = JSON.parse(pm.collectionVariables.get('canonical_fields'));",
+                  "pm.test('view full', () => pm.expect(b.view).to.eql('full'));",
+                  "pm.test('145 fields', () => b.items.forEach((i) => pm.expect(Object.keys(i.record)).to.eql(canonical)));",
+                  "const it = b.items.find((i) => i.record.internal_record_id === pm.collectionVariables.get('record_id'));",
+                  "pm.test('Stored NIN returned', () => pm.expect(it && it.record.nin).to.eql('99000001035'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -68,7 +68,7 @@ $key = node -e "console.log(require('crypto').randomBytes(24).toString('base64ur
 (Get-Content .env) -replace '^DATABRIDGE_API_KEY=.*', "DATABRIDGE_API_KEY=$key" | Set-Content .env
 ```
 
-The stack always runs in **demo mode**: only synthetic records are accepted (`synthetic` must be true, and NINs must start with `99`). No full-access key is configured, so pull is always masked. The mode is fixed in `docker-compose.yml` and cannot be switched from `.env`. Integration mode is a separate, deliberate setup (see [docs/api/openg2p-integration.md](docs/api/openg2p-integration.md)).
+The stack always runs in **demo mode**: only synthetic records are accepted (`synthetic` must be true, and NINs must start with `99`). Pull returns the stored synthetic values unmasked (`DATABRIDGE_UNMASKED_PULL=true`, the compose default); set `DATABRIDGE_UNMASKED_PULL=false` in `.env` for masked pulls. No full-access key is configured. The mode is fixed in `docker-compose.yml` and cannot be switched from `.env`. Integration mode is a separate, deliberate setup (see [docs/api/openg2p-integration.md](docs/api/openg2p-integration.md)).
 
 **2. Build and start**
 
@@ -90,7 +90,7 @@ $key = (Select-String -Path .env -Pattern '^DATABRIDGE_API_KEY=(.+)$').Matches[0
 curl.exe -s http://localhost:8080/api/v1/health
 # Push the synthetic sample: 201 CREATED, then 200 UNCHANGED when repeated
 curl.exe -s -X POST http://localhost:8080/api/v1/records -H "X-API-Key: $key" -H "Content-Type: application/json" --data "@docs/samples/openg2p-push-record.json"
-# Pull: masked ("nin": "*******1035")
+# Pull: all 145 fields per record, null where nothing is stored; unmasked in the demo ("nin": "99000001035")
 curl.exe -s "http://localhost:8080/api/v1/records?page_size=5" -H "X-API-Key: $key"
 ```
 
@@ -125,14 +125,14 @@ node server/api.js --seed-demo      # http://127.0.0.1:8080/api/v1/records
 ```
 
 - `POST /api/v1/records` takes one record. It creates or updates it by `internal_record_id`, and an identical repeat returns `UNCHANGED`.
-- `GET /api/v1/records?page=&page_size=&updated_since=` returns records, paged.
+- `GET /api/v1/records?page=&page_size=&updated_since=&changed_by=` returns records, paged. Every record lists all 145 build-sheet fields, in sheet order; a field with no stored value is `null`.
 
 Fields are validated against the build-sheet schema (`prototype/schema.js`), using the engine's own `validateCanonical` rules. Records are stored in one JSON file. `--seed-demo` preloads 30 synthetic records produced by the existing ingestion pipeline.
 
 Four safety rules apply:
 
 - **Demo mode (default)** accepts synthetic records only. `DATABRIDGE_MODE=integration` accepts real ones, but requires an API key, an explicit `synthetic` flag and a separate store.
-- **Pull is masked by default**, following the sheet's sensitivity and masking columns. Unmasked pull needs a separate full-access key and an `X-Access-Purpose` header, and every unmasked pull is logged.
+- **Pull is masked by default**, following the sheet's sensitivity and masking columns. Unmasked pull needs a separate full-access key and an `X-Access-Purpose` header, and every unmasked pull is logged. For demos only, `DATABRIDGE_UNMASKED_PULL=true` returns the stored synthetic values to the standard key; the server refuses to start with it in integration mode.
 - `meta.origin` and the `changed_by` filter keep OpenG2P pushes apart from DataBridge-ingested records, which prevents push-pull loops.
 - The service listens only on `127.0.0.1` unless an API key is set.
 
@@ -199,7 +199,8 @@ cct-databridge/
   tests/engine.test.js 26 tests covering every failure path below
   tests/ui-terms.test.js 11 tests: labels for every code, status and audit action; navigation and statuses
   tests/ui-flow.test.js 8 jsdom tests of the operator flow and admin pages (skipped if jsdom is not installed)
-  tests/api.test.js    15 tests: status codes, validation, duplicates, paging, keys, modes, masking, direction
+  tests/api.test.js    21 tests: status codes, validation, duplicates, paging, keys, modes, masking, direction, 145-field records, demo unmasked pull
+  scripts/build-postman.js  postman/ collection and environments; field list taken from prototype/schema.js
   templates/           nsr_import_template.csv, field_dictionary.csv
   docs/
     architecture/      8 Mermaid sources (A–H), the single source of truth for diagrams

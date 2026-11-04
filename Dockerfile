@@ -14,11 +14,13 @@ VOLUME ["/data"]
 USER node
 
 # Demo mode by default. Integration mode is never enabled by this image or the compose file.
+# Pull is masked unless the deployment sets DATABRIDGE_UNMASKED_PULL=true (demo mode only).
 ENV NODE_ENV=production \
     DATABRIDGE_MODE=demo \
     HOST=0.0.0.0 \
     PORT=8080 \
-    DATABRIDGE_DATA_FILE=/data/demo-records.json
+    DATABRIDGE_DATA_FILE=/data/demo-records.json \
+    DATABRIDGE_UNMASKED_PULL=false
 
 EXPOSE 8080
 

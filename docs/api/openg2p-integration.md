@@ -9,7 +9,7 @@ Two REST endpoints let OpenG2P send records to CCT DataBridge (push) and fetch r
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/api/v1/records` | Push one record (create, or update by `internal_record_id`) |
-| `GET` | `/api/v1/records` | Pull records, paged; masked unless full access is granted |
+| `GET` | `/api/v1/records` | Pull records, paged, all 145 fields each; masked unless full access (or demo unmasked pull) is on |
 | `GET` | `/api/v1/health` | Liveness check and current mode (no key needed) |
 
 ## Settings
@@ -21,6 +21,7 @@ Two REST endpoints let OpenG2P send records to CCT DataBridge (push) and fetch r
 | `PORT` | `8080` | Port |
 | `DATABRIDGE_API_KEY` | not set | Standard key: push and masked pull. Required in integration mode |
 | `DATABRIDGE_FULL_ACCESS_KEY` | not set | Optional second key: unmasked pull. If not set, nobody can pull unmasked data |
+| `DATABRIDGE_UNMASKED_PULL` | `false` | `true` = the standard key pulls stored values unmasked (`"view": "full"`), with no purpose header or access log. **Demo mode only**: with `DATABRIDGE_MODE=integration` the service refuses to start. Any value other than `true`/`false` is refused |
 | `DATABRIDGE_DATA_FILE` | `server/data/<mode>-records.json` | Record store. Demo and integration use separate files |
 | `DATABRIDGE_ACCESS_LOG` | `<data file>.access-log.jsonl` | One line per unmasked pull |
 
@@ -56,9 +57,9 @@ Pull applies the sheet's own *Sensitivity* and *Masking* columns, so no new poli
 
 | Sheet sensitivity | Fields | In a masked pull |
 |---|---|---|
-| High (health), High (religion): 16 fields, marked "purpose-based access only" | `pregnant`, `lactating`, `muac`, the disability, chronic-illness and nutrition fields, `member_religious_group` | **Left out** |
+| High (health), High (religion): 16 fields, marked "purpose-based access only" | `pregnant`, `lactating`, `muac`, the disability, chronic-illness and nutrition fields, `member_religious_group` | **Withheld** (`null`) |
 | High: 5 fields, "last 4 visible" | `nin`, `nin_tracking_number`, `bvn`, `account_number`, `account_name` | `"*******1035"` |
-| Medium: 14 fields, "partially masked" | names, `household_name`, `household_address`, `phone_number`, `email`, `birth_date`, coordinates | Strings show only the first character (`"C******"`, `"+*************"`). Dates show the year (`"1990-**-**"`). Numbers (`latitude`, `longitude`, `accuracy_m`) are left out |
+| Medium: 14 fields, "partially masked" | names, `household_name`, `household_address`, `phone_number`, `email`, `birth_date`, coordinates | Strings show only the first character (`"C******"`, `"+*************"`). Dates show the year (`"1990-**-**"`). Numbers (`latitude`, `longitude`, `accuracy_m`) are withheld (`null`) |
 | Low: 110 fields | codes, locations, household facts | Unchanged |
 
 Access has two levels:
@@ -68,6 +69,10 @@ Access has two levels:
   - Every unmasked pull must send `X-Access-Purpose: <reason, at least 10 characters>`. Without it the request gets `400 PURPOSE_REQUIRED`.
   - Each unmasked pull appends a line to the access log: time, trace ID, purpose, query and record IDs. Values are never logged.
   - The response says `"view": "full"`.
+
+Every record lists all 145 fields either way, so in the masked view `null` means "not stored" or "withheld".
+
+**Demo unmasked pull** (`DATABRIDGE_UNMASKED_PULL=true`) is a third, demo-only setting for showing the synthetic data in full, for example in Postman. The standard key still has to be sent, and the response says `"view": "full"`. It is safe only because demo mode stores synthetic records only (`synthetic` must be true, NINs must start with `99`, and the service will not start on a store holding a real record). It cannot be combined with integration mode, so real records are only ever unmasked through the full-access key, its purpose header and the access log. The full-access key keeps those rules even when this setting is on.
 
 Masking is applied on the way out only; the store keeps the real values. If a masked value is pushed back (any string containing `***`), it is rejected with `422 MASKED_VALUE`. A masked pull can therefore never overwrite real data.
 
@@ -211,6 +216,8 @@ Sample request: [openg2p-push-record.json](../samples/openg2p-push-record.json).
 | `changed_by` | none | `databridge-ingestion` or `openg2p-push` |
 
 The response is `{ view, items: [{ record, meta: { version, received_at, updated_at, origin } }], page, page_size, total, has_more }`, ordered by `updated_at`, oldest first.
+
+`record` always has exactly the 145 build-sheet fields (from `prototype/schema.js`), in sheet order, and nothing else. A field with no stored value is `null`; nothing is filled in or invented. `meta` is separate and not one of the 145. The expansion happens in the response only: the stored record, its content hash and push idempotency are unchanged. A pulled record can be pushed back as it is, because `null` counts as "not sent".
 
 For an incremental sync:
 

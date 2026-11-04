@@ -181,6 +181,15 @@ function maskRecord(record) {
   return out;
 }
 
+// Every pulled record lists all build-sheet attributes, in sheet order. A field with no
+// stored value (or withheld by masking) is null. Builds a new object; the store is not touched.
+const CANONICAL = SCHEMA.fields.map((f) => f.name);
+function expandRecord(record) {
+  const out = {};
+  for (const name of CANONICAL) out[name] = Object.hasOwn(record, name) ? record[name] : null;
+  return out;
+}
+
 // Pull: oldest change first, so a caller can page through and keep the last
 // updated_at it saw as the next updated_since.
 // opts.view: 'masked' (default) applies the sheet's masking; 'full' returns stored values.
@@ -212,7 +221,7 @@ function pullRecords(store, query, opts) {
     ok: true,
     view,
     items: slice.map((it) => ({
-      record: view === 'full' ? it.record : maskRecord(it.record),
+      record: expandRecord(view === 'full' ? it.record : maskRecord(it.record)),
       meta: { version: it.meta.version, received_at: it.meta.received_at, updated_at: it.meta.updated_at, origin: it.meta.origin },
     })),
     page, page_size: pageSize, total: all.length, has_more: page * pageSize < all.length,
@@ -238,4 +247,4 @@ function seedFromIngestion(store) {
   return added;
 }
 
-module.exports = { validateRecord, pushRecord, pullRecords, maskRecord, createStore, seedFromIngestion, FIELDS, SYSTEM_DEFAULTS, MASK, ORIGINS };
+module.exports = { validateRecord, pushRecord, pullRecords, maskRecord, expandRecord, createStore, seedFromIngestion, FIELDS, CANONICAL, SYSTEM_DEFAULTS, MASK, ORIGINS };

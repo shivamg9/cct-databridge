@@ -200,7 +200,7 @@ test('pull masks sensitive fields by default, following the sheet', async () => 
     assert.equal(rec.phone_number[0], '+');
     assert.doesNotMatch(rec.phone_number, /\d/);
     assert.equal(rec.birth_date, '1990-**-**');
-    for (const k of ['latitude', 'longitude', 'pregnant', 'member_religious_group']) assert.ok(!(k in rec), `${k} withheld`);
+    for (const k of ['latitude', 'longitude', 'pregnant', 'member_religious_group']) assert.equal(rec[k], null, `${k} withheld`);
     assert.equal(rec.gender, '1', 'low-sensitivity fields are unchanged');
     assert.equal(server.store.items[SAMPLE.internal_record_id].record.nin, '99000001035', 'masking is applied on the way out only');
     for (const [name, rule] of R.MASK) if (rule === 'HIDE') assert.ok(R.FIELDS.get(name).sensitivePersonal);
@@ -287,6 +287,78 @@ test('record IDs that clash with object built-ins are stored as plain keys', asy
     assert.equal(Object.keys(server.store.items).length, 3);
     assert.equal(({}).polluted, undefined);
     assert.equal((await (await pull(base)).json()).total, 3);
+  });
+});
+
+// ---- Full 145-field records and demo unmasked pull ---------------------------------
+const SCHEMA = require('../prototype/schema.js');
+
+test('every pulled record has exactly the 145 build-sheet fields, null where nothing is stored', async () => {
+  assert.equal(SCHEMA.fields.length, 145);
+  assert.deepEqual(R.CANONICAL, SCHEMA.fields.map((f) => f.name));
+  const store = R.createStore(null);
+  R.seedFromIngestion(store);
+  const before = JSON.stringify(store.items);
+  await withServer({ store, unmaskedPull: true }, async (base) => {
+    const body = await (await pull(base, '?changed_by=databridge-ingestion&page_size=5')).json();
+    assert.deepEqual([body.view, body.items.length, body.total, body.has_more], ['full', 5, 30, true]);
+    for (const { record, meta } of body.items) {
+      assert.deepEqual(Object.keys(record), R.CANONICAL, 'all 145 fields, in sheet order, nothing else');
+      assert.deepEqual(Object.keys(meta).sort(), ['origin', 'received_at', 'updated_at', 'version']);
+      const stored = store.items[record.internal_record_id].record;
+      for (const name of R.CANONICAL) {
+        if (Object.hasOwn(stored, name)) assert.deepEqual(record[name], stored[name], `${name} returned as stored`);
+        else assert.equal(record[name], null, `${name} not stored, so null`);
+      }
+      assert.ok(Object.keys(stored).length < 145, 'the test data really has absent fields');
+    }
+    // Expanding the response does not change the stored records, their hashes or idempotency.
+    assert.equal(JSON.stringify(store.items), before);
+    const again = await (await push(base, store.items['SR1-0000001'].record)).json();
+    assert.deepEqual([again.status, again.version], ['UNCHANGED', 1]);
+    const echoed = await (await push(base, body.items[0].record)).json();
+    assert.deepEqual([echoed.status, echoed.version], ['UNCHANGED', 1], 'a pulled record, nulls included, pushes back as unchanged');
+  });
+});
+
+test('demo unmasked pull returns stored values to the standard key and stays off by default', async () => {
+  const accessLog = tmpFile() + '.access-log.jsonl';
+  await withServer({ apiKey: FULL.apiKey, unmaskedPull: true, accessLog }, async (base) => {
+    await push(base, SAMPLE, H(FULL.apiKey));
+    assert.equal((await pull(base)).status, 401, 'the API key is still required');
+    const body = await (await pull(base, '', H(FULL.apiKey))).json();
+    assert.equal(body.view, 'full');
+    const rec = body.items[0].record;
+    assert.deepEqual([rec.nin, rec.bvn, rec.phone_number, rec.given_name, rec.birth_date, rec.latitude], ['99000001035', '22000013455', '+2348010038295', 'Chinedu', '1990-11-25', 7.44637]);
+    assert.equal(rec.pregnant, null, 'not pushed, so null');
+    assert.ok(!fs.existsSync(accessLog), 'synthetic demo pulls are not written to the full-access log');
+  });
+  for (const opts of [{ apiKey: FULL.apiKey }, { apiKey: FULL.apiKey, unmaskedPull: false }]) {
+    await withServer(opts, async (base) => {
+      await push(base, SAMPLE, H(FULL.apiKey));
+      const body = await (await pull(base, '', H(FULL.apiKey))).json();
+      assert.equal(body.view, 'masked');
+      assert.equal(body.items[0].record.nin, '*******1035');
+      assert.equal(Object.keys(body.items[0].record).length, 145);
+    });
+  }
+  const cfg = (v) => configFromEnv({ DATABRIDGE_API_KEY: 'k', DATABRIDGE_UNMASKED_PULL: v }).unmaskedPull;
+  assert.deepEqual([cfg(undefined), cfg('false'), cfg('true'), cfg('TRUE')], [false, false, true, true]);
+  assert.throws(() => cfg('yes'), /must be true or false/);
+});
+
+test('integration mode refuses the demo unmasked switch and keeps the full-access controls', async () => {
+  assert.throws(() => configFromEnv({ DATABRIDGE_MODE: 'integration', DATABRIDGE_API_KEY: 'k', DATABRIDGE_UNMASKED_PULL: 'true' }), /demo mode only/);
+  assert.throws(() => createServer({ mode: 'integration', apiKey: 'k', unmaskedPull: true }), /demo mode only/);
+  const accessLog = tmpFile() + '.access-log.jsonl';
+  await withServer({ mode: 'integration', ...FULL, accessLog }, async (base) => {
+    await push(base, SAMPLE, H(FULL.apiKey));
+    assert.equal((await (await pull(base, '', H(FULL.apiKey))).json()).view, 'masked');
+    assert.equal((await pull(base, '', H(FULL.fullAccessKey))).status, 400, 'purpose still required');
+    const body = await (await pull(base, '', H(FULL.fullAccessKey, { 'X-Access-Purpose': 'OpenG2P integration test INT-43' }))).json();
+    assert.equal(body.view, 'full');
+    assert.equal(Object.keys(body.items[0].record).length, 145);
+    assert.equal(fs.readFileSync(accessLog, 'utf8').trim().split('\n').length, 1, 'unmasked integration pull is logged');
   });
 });
 

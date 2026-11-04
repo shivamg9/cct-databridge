@@ -29,7 +29,9 @@ The Secret `databridge-secrets` (API key) is created by hand in step 4 and is ne
 Design notes:
 - The backend stores records in one JSON file, so it must stay at **1 replica** (`Recreate` strategy, RWO volume). Do not scale it.
 - The Service is named `backend` because the frontend image's `nginx.conf` proxies to `http://backend:8080`.
-- Demo mode is fixed (`DATABRIDGE_MODE=demo`): synthetic records only, pull is always masked.
+- Demo mode is fixed (`DATABRIDGE_MODE=demo`): synthetic records only.
+- `DATABRIDGE_UNMASKED_PULL: "true"` in `10-backend.yaml`: pull returns the stored synthetic values (`"view": "full"`); the API key is still required. Set it to `"false"` for masked pulls. The backend refuses to start if this is combined with integration mode.
+- Every pulled record has all 145 build-sheet fields; absent ones are `null`.
 - Both pods run as non-root with a read-only root filesystem.
 
 ## Prerequisites
@@ -51,7 +53,7 @@ The server is x86_64, so build for `linux/amd64`.
 docker login
 ```
 ```bash
-docker buildx build --platform linux/amd64 -t oorudigital/cct-databridge-backend:0.5.0 -f Dockerfile --push .
+docker buildx build --platform linux/amd64 -t oorudigital/cct-databridge-backend:0.6.0 -f Dockerfile --push .
 ```
 ```bash
 docker buildx build --platform linux/amd64 -t oorudigital/cct-databridge-frontend:0.5.0 -f docker/frontend.Dockerfile --push .
@@ -156,7 +158,9 @@ curl -s -X POST https://databridge.openg2p.dpiforall.com/api/v1/records -H "X-AP
 curl -s "https://databridge.openg2p.dpiforall.com/api/v1/records?page_size=5" -H "X-API-Key: $KEY"
 ```
 
-Expected: health `ok`; first push `201` (`CREATED`), a repeat `200` (`UNCHANGED`); pull returns masked values (`"nin": "*******1035"`); 31 records in total (30 seeded + the sample).
+Expected: health `ok`; first push `201` (`CREATED`), a repeat `200` (`UNCHANGED`); pull returns `"view": "full"`, 145 fields per record and unmasked synthetic values (`"nin": "99000001035"`); 31 records in total (30 seeded + the sample).
+
+The Postman collection in `postman/` runs all of these checks (environment "CCT DataBridge - Live", `expected_view` = `full`).
 
 ## Operations
 
@@ -165,6 +169,7 @@ Expected: health `ok`; first push `201` (`CREATED`), a repeat `200` (`UNCHANGED`
 | Backend logs | `k -n cct-databridge logs -f deploy/databridge-backend` |
 | Frontend logs | `k -n cct-databridge logs -f deploy/databridge-frontend` |
 | Update | push a new tag, change `newTag` in `kustomization.yaml`, copy it, then `k apply -k ~/cct-databridge-k8s` |
+| Masked / unmasked pull | change `DATABRIDGE_UNMASKED_PULL` in `10-backend.yaml`, copy it, then `k apply -k ~/cct-databridge-k8s` (the backend restarts) |
 | Roll back | `k -n cct-databridge rollout undo deploy/databridge-frontend` (or `databridge-backend`) |
 | Rotate API key | `k -n cct-databridge delete secret databridge-secrets`, re-run step 4's second command, then `k -n cct-databridge rollout restart deploy/databridge-backend` |
 | Remove everything | `k delete -k ~/cct-databridge-k8s` (the NFS volume uses `Retain`, so its data stays under `/srv/nfs/openg2p`) |

@@ -17,7 +17,10 @@ services:
       PORT: "8080"
       DATABRIDGE_DATA_FILE: /data/demo-records.json
       DATABRIDGE_API_KEY: ${DATABRIDGE_API_KEY:?Set DATABRIDGE_API_KEY in .env (see .env.example)}
-      # DATABRIDGE_FULL_ACCESS_KEY is deliberately not passed: pull stays masked.
+      # Demo only: pull returns the stored synthetic values. Set it to false in .env for masked pulls.
+      # The server refuses to start if this is true in integration mode.
+      DATABRIDGE_UNMASKED_PULL: ${DATABRIDGE_UNMASKED_PULL:-true}
+      # DATABRIDGE_FULL_ACCESS_KEY is deliberately not passed.
     volumes:
       - databridge-data:/data
     expose:
