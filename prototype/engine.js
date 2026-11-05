@@ -1666,5 +1666,25 @@
     st.now = Math.max(st.now, real);
   }
 
-  return { createEngine, seedDemo, SCENARIOS, ERROR_TAXONOMY, ROLES, PERMISSIONS, TRANSFORMS, sha256, parseCsv, csvCell, toCsv, mulberry32 };
+  // One processed record as POST /api/v1/records expects it. The upload mapping covers only part of the
+  // template, so the source row's named columns fill what it left out (crops, assets, health, ...).
+  // The ID never comes from the master sequence: it restarts with each page load and would overwrite other households.
+  function backendRecord(schema, r) {
+    const out = {};
+    const rawValue = (name) => String((r.raw && r.raw[name]) === undefined || r.raw[name] === null ? '' : r.raw[name]).trim();
+    for (const f of schema.fields) {
+      const v = f.fill === 'source' ? rawValue(f.name) : '';
+      if (!v) continue;
+      if (f.type === 'enumeration (multi)') out[f.name] = v.split(/[;|]/).map((x) => x.trim()).filter(Boolean);
+      else if (f.type.startsWith('integer') || f.type.startsWith('decimal')) out[f.name] = Number.isNaN(Number(v)) ? v : Number(v); // a bad number stays text, so the server rejects it
+      else out[f.name] = v;
+    }
+    Object.assign(out, r.canonical);
+    const c = r.canonical;
+    const person = c.nin || [c.given_name, c.family_name, c.birth_date].join('|');
+    out.internal_record_id = rawValue('internal_record_id') || `UPL-${sha256(`${c.nsr_household_serial}|${person}`).slice(0, 20)}`;
+    return out;
+  }
+
+  return { createEngine, seedDemo, backendRecord, SCENARIOS, ERROR_TAXONOMY, ROLES, PERMISSIONS, TRANSFORMS, sha256, parseCsv, csvCell, toCsv, mulberry32 };
 });

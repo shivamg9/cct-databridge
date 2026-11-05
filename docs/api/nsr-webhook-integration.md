@@ -2,7 +2,7 @@
 
 CCT DataBridge sends households to the OpenG2P National Social Registry (NSR) Household Register through the NSR partner ingestion endpoint. This is the reference for developers and the NSR integration team. Field-level detail is in [nsr-field-mapping.md](nsr-field-mapping.md); day-to-day operation is in [../operations/nsr-delivery-operations.md](../operations/nsr-delivery-operations.md); rollout is in [../operations/nsr-deployment-runbook.md](../operations/nsr-deployment-runbook.md).
 
-> **Status (backend 0.7.0).** Implemented and tested against a mock of the NSR endpoint only. **Not yet sent to the real NSR.** The webhook is off by default (`NSR_WEBHOOK_ENABLED=false`) and stays off until the NSR team answers the open questions below.
+> **Status (backend 0.7.0, frontend 0.7.1).** A single synthetic household reached the NSR Household intake form on 5 Nov 2026. Batches are not yet proven against the real NSR. The webhook is off by default (`NSR_WEBHOOK_ENABLED=false`).
 
 ## 1. What is sent where
 

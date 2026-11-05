@@ -16,4 +16,4 @@ images:
     newTag: "0.7.0"
   - name: cct-databridge-frontend
     newName: oorudigital/cct-databridge-frontend
-    newTag: "0.7.0"
+    newTag: "0.7.1"

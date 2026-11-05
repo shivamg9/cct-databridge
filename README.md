@@ -144,9 +144,9 @@ DataBridge can send households to the NSR Household Register through `POST /part
 
 - **Off by default** (`NSR_WEBHOOK_ENABLED=false`): preview works, nothing is sent. The base `docker-compose.yml` fixes it off; `docker-compose.nsr-mock.yml` turns it on against a local mock only.
 - **API**: `/api/v1/nsr/config`, `/households`, `/preview`, `/submit`, `/submit/batch`, `/deliveries[/{id}[/retry|/reconcile]]`. Submitting needs a separate key (`DATABRIDGE_NSR_SUBMIT_KEY`) and an `X-Operator-Id`.
-- **Console**: Transfers → Send to NSR.
+- **Console**: Transfers → Send to NSR. It lists records on the server. Add Records runs in the browser, so finish a transfer with **Save to Server** (needs the API key) before the households appear there. To load a sheet without the console: `node scripts/load-households-csv.js docs/samples/nsr-test-households.csv --url <base url>`.
 - **Never sent automatically**: not at startup, not on seed, push or pull. Uncertain outcomes are reconciled by a person, never resent blindly.
-- **Not yet tested against the real NSR.** Open questions for the NSR team (signature, authentication, commit status, code values, defaults) are listed in the integration reference.
+- **Real NSR**: a single synthetic household reached the NSR Household intake form on 5 Nov 2026 (`docker-compose.nsr-real.yml` points the local stack at it). Batches are not yet proven there. Open questions for the NSR team (signature, authentication, commit status, code values, defaults) are listed in the integration reference.
 
 Docs: [nsr-webhook-integration.md](docs/api/nsr-webhook-integration.md) (reference and open questions), [nsr-field-mapping.md](docs/api/nsr-field-mapping.md) (all 202 NSR fields, generated from `server/integrations/nsr/mapping.json`), [nsr-delivery-operations.md](docs/operations/nsr-delivery-operations.md), [nsr-deployment-runbook.md](docs/operations/nsr-deployment-runbook.md).
 
