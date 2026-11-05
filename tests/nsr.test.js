@@ -634,6 +634,35 @@ test('config endpoint shows settings without secrets', async () => {
   });
 });
 
+test('a console upload reaches the server store complete, with IDs that survive a page reload', () => {
+  const DB = require('../prototype/engine.js');
+  const text = fs.readFileSync(path.join(__dirname, '../docs/samples/nsr-test-households.csv'), 'utf8').replace(/^internal_record_id,/, 'skip_id,');
+  const rows = DB.parseCsv(text);
+  const file = { name: 'households.csv', size: text.length, mime: 'text/csv', headBytes: [...Buffer.from(text.slice(0, 8))], text, rows, checksum: DB.sha256(text) };
+  const upload = () => {
+    const e = DB.createEngine(SCHEMA, { now: NOW });
+    const run = e.runToCompletion(e.startRun('SRC-LGA-UPLOAD', { mode: 'IMPORT', sim: {}, file, approvedBy: 'test' }));
+    return run.records.filter((r) => r.primary.masterId).map((r) => DB.backendRecord(SCHEMA, r));
+  };
+  const first = upload(), second = upload();
+  assert.equal(first.length, 9);
+  assert.deepEqual(first.map((r) => r.internal_record_id), second.map((r) => r.internal_record_id), 'a fresh page gives the same IDs');
+  assert.equal(new Set(first.map((r) => r.internal_record_id)).size, 9, 'each member has an ID of their own');
+
+  const store = R.createStore(null);
+  for (const r of first) assert.equal(R.pushRecord(store, r, { mode: 'integration' }).ok, true, r.internal_record_id);
+  const h = built(store, 'NSR-HH-TEST-0003');
+  assert.equal(h.status, 'READY', JSON.stringify(h.errors));
+  assert.equal(h.message.household_members.length, 3);
+  assert.equal(h.message.Cassava, 'YES', 'columns outside the upload mapping are kept');
+  assert.equal(h.message.goat, 'YES');
+  for (const r of second) assert.equal(R.pushRecord(store, r, { mode: 'integration' }).status, 'UNCHANGED', 'uploading the same sheet again changes nothing');
+
+  const sheet = DB.parseCsv(fs.readFileSync(path.join(__dirname, '../docs/samples/nsr-test-households.csv'), 'utf8'));
+  const raw = Object.fromEntries(sheet[0].map((name, i) => [name, sheet[1][i]]));
+  assert.equal(DB.backendRecord(SCHEMA, { raw, canonical: { nsr_household_serial: 'NSR-HH-TEST-0001' } }).internal_record_id, 'TEST-REC-0001', 'a sheet that carries IDs keeps them, so it matches the CSV loader');
+});
+
 test('docs/api/nsr-field-mapping.md is generated from mapping.json and up to date', () => {
   const { render, OUT } = require('../scripts/build-nsr-mapping-doc.js');
   assert.equal(fs.readFileSync(OUT, 'utf8'), render(), 'run: node scripts/build-nsr-mapping-doc.js');

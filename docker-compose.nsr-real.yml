@@ -1,0 +1,15 @@
+# Local stack that sends to the REAL NSR (staff-nsr.openg2p.dpiforall.com). Synthetic records only (demo mode).
+#   docker compose -f docker-compose.yml -f docker-compose.nsr-real.yml up -d
+#   docker compose restart frontend        # nginx must pick up the recreated backend
+# Sending still needs an operator: Transfers > Send to NSR, the NSR submit key, and a confirmation.
+# Back to the mock: docker compose -f docker-compose.yml -f docker-compose.nsr-mock.yml up -d
+services:
+  backend:
+    environment:
+      NSR_WEBHOOK_ENABLED: "true"
+      NSR_WEBHOOK_BASE_URL: https://staff-nsr.openg2p.dpiforall.com
+      NSR_WEBHOOK_INSECURE_TEST_ENDPOINT: "false"
+      NSR_WEBHOOK_ALLOW_SYNTHETIC: "true"
+      NSR_WEBHOOK_SIGNATURE: ${NSR_WEBHOOK_SIGNATURE:?Set NSR_WEBHOOK_SIGNATURE in .env}
+      DATABRIDGE_NSR_SUBMIT_KEY: ${DATABRIDGE_NSR_SUBMIT_KEY:?Set DATABRIDGE_NSR_SUBMIT_KEY in .env (see .env.example)}
+      NSR_WEBHOOK_DELIVERY_FILE: /data/real-nsr-deliveries.json

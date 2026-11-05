@@ -100,7 +100,7 @@
     // Send to NSR. Keys live in this object only (page memory), never in storage.
     nsr: { key: '', submitKey: '', operator: '', cfg: null, households: null, deliveries: null, selected: [], preview: null, result: null, confirm: false, busy: false, error: null, notes: {} },
   };
-  function newWizard() { return { step: 1, sourceId: '', mode: '', file: null, upload: null, headerCheck: null, sim: {}, dry: null, ack: false, testResult: null, runId: null, showIssues: false }; }
+  function newWizard() { return { step: 1, sourceId: '', mode: '', file: null, upload: null, headerCheck: null, sim: {}, dry: null, ack: false, testResult: null, runId: null, showIssues: false, save: null }; }
 
   // Settings pages are for administrators; anyone else asking for one lands on Home.
   const allowedPage = (page) => (T.SETTINGS_PAGES.includes(page) && !techAllowed() ? 'home' : page);
@@ -985,7 +985,42 @@
     const open = attentionIds();
     const r = simpleResult(run, open);
     const attn = r.tone === 'crit' || run.records.some((x) => recordState(x, open)[0] === 'Needs Attention');
-    return html`${resultBox(r)}<div class="btns"><button class="btn" data-act="run" data-arg="${run.id}">${attn ? 'View Issues' : 'View Details'}</button><button class="btn primary lg" data-act="wiz-done">Done</button></div>`;
+    return html`${resultBox(r)}${savePanel(run)}<div class="btns"><button class="btn" data-act="run" data-arg="${run.id}">${attn ? 'View Issues' : 'View Details'}</button><button class="btn primary lg" data-act="wiz-done">Done</button></div>`;
+  }
+  // Transfers run in this browser only. Send to NSR reads the server, so processed records are saved there explicitly.
+  const savable = (run) => run.records.filter((r) => r.primary.masterId);
+  function savePanel(run) {
+    const count = savable(run).length;
+    if (!count || !E.can('run.start')) return '';
+    const s = UI.wiz.save;
+    const saved = s && !s.busy && s.done > 0;
+    return html`<section class="panel"><header><b>Save for Send to NSR</b></header><div class="body stack">
+      <p style="margin:0">${num(count)} records are ready. Save them to the server to send them to NSR.</p>
+      <label class="field">API key<input type="password" id="wiz-api-key" autocomplete="off" data-live data-bind="nsr.key" value="${UI.nsr.key}"></label>
+      ${s && s.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(s.error)}</b></div>` : ''}
+      ${s && s.failed.length ? html`<div class="callout crit" role="alert"><b>${num(s.failed.length)} records were not saved.</b><ul class="small">${s.failed.slice(0, 20).map((f) => html`<li>${f}</li>`)}</ul></div>` : ''}
+      ${saved ? html`<div class="callout ok" role="status"><b>${num(s.done)} of ${num(s.total)} records saved.</b></div>` : ''}
+      <div class="btns"><button class="btn primary" data-act="wiz-save" ${raw(!UI.nsr.key || (s && s.busy) ? 'disabled' : '')}>${s && s.busy ? `Saving ${num(s.done)} of ${num(s.total)}` : 'Save to Server'}</button>
+      ${saved && E.can('nsr.preview') ? html`<button class="btn" data-act="wiz-open-nsr">Open Send to NSR</button>` : ''}</div></div></section>`;
+  }
+  // One request per record, the API's limit. Saving again is safe: an unchanged record stays as it is.
+  async function saveRun(run) {
+    const records = savable(run).map((r) => DB.backendRecord(SCHEMA, r));
+    const s = UI.wiz.save = { busy: true, done: 0, total: records.length, failed: [], error: null };
+    render();
+    for (const rec of records) {
+      let res, data;
+      try {
+        res = await fetch('/api/v1/records', { method: 'POST', headers: { 'X-API-Key': UI.nsr.key, 'Content-Type': 'application/json' }, body: JSON.stringify(rec) });
+        data = await res.json();
+      } catch (e) { s.error = 'NETWORK'; break; }
+      if (res.status === 401) { s.error = 'UNAUTHORISED'; break; }
+      if (res.ok) s.done++;
+      else s.failed.push(`${rec.given_name || rec.internal_record_id}: ${((data.error && data.error.details) || []).map((d) => d.message).join('; ') || (data.error && data.error.message) || 'not saved'}`);
+      render();
+    }
+    s.busy = false;
+    render();
   }
   function simPanel() {
     const w = UI.wiz;
@@ -1463,6 +1498,8 @@
     'wiz-reset': () => { UI.wiz = newWizard(); },
     'wiz-receive': () => validateNow(),
     'wiz-done': () => { UI.wiz = newWizard(); go('home'); },
+    'wiz-save': () => { saveRun(E.getRun(UI.wiz.runId)); },
+    'wiz-open-nsr': () => { UI.wiz = newWizard(); go('runs', { tview: 'nsr' }); nsrRun(nsrLoad); },
     'wiz-sample': (k) => { const f = E.sampleFile(k, UI.wiz.sourceId); const u = E.validateUpload(f); UI.wiz.upload = u; UI.wiz.dry = null; if (u.ok) { setFile({ ...f, checksum: DB.sha256(f.text) }); validateNow(); } else { UI.wiz.file = { ...f, rejected: true }; UI.wiz.headerCheck = null; } },
     'wiz-issues': () => { UI.wiz.showIssues = !UI.wiz.showIssues; },
     'wiz-report': () => {

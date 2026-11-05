@@ -222,3 +222,43 @@ test('Send to NSR: permitted roles only; check, review and send through the API 
   assert.ok(!u.failed());
   assert.deepEqual(u.errors, []);
 });
+
+test('after a transfer, Save to Server pushes each record, then Send to NSR opens on the server list', { skip }, async () => {
+  const u = boot();
+  const pushed = [];
+  const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+  let keyOk = false;
+  u.w.fetch = async (url, opts) => {
+    if (url === '/api/v1/records') {
+      if (!keyOk) return reply(401, { error: { code: 'UNAUTHORISED', message: 'no' } });
+      pushed.push(JSON.parse(opts.body));
+      return reply(201, { status: 'CREATED' });
+    }
+    if (url.endsWith('/config')) return reply(200, { enabled: true });
+    if (url.endsWith('/households')) return reply(200, { items: [{ household_serial: pushed[0].nsr_household_serial, status: 'READY', members: 1, errors: [], warnings: 0, latest_delivery: null }] });
+    return reply(200, { items: [] });
+  };
+  u.click('[data-act="nav"][data-arg="ingest"]');
+  u.click('[data-act="wiz-source"][data-arg="SRC-LGA-UPLOAD"]');
+  u.click(u.$('[data-act="wiz-sample"]'));
+  await u.until(() => u.$('[data-act="wiz-start"]'));
+  const ack = u.$('#wiz-ack');
+  if (ack) { ack.checked = true; ack.dispatchEvent(new u.w.Event('change', { bubbles: true })); }
+  u.click('[data-act="wiz-start"]');
+  await u.until(() => u.$('[data-act="wiz-save"]'), 30000);
+  assert.ok(u.$('[data-act="wiz-save"]').disabled, 'needs the API key');
+  const key = u.$('#wiz-api-key'); key.value = 'wrong-key'; key.dispatchEvent(new u.w.Event('input', { bubbles: true }));
+  await u.until(() => !u.$('[data-act="wiz-save"]').disabled);
+  u.click('[data-act="wiz-save"]');
+  await u.until(() => /The API key was not accepted\./.test(u.text()));
+  assert.equal(pushed.length, 0);
+  keyOk = true;
+  u.click('[data-act="wiz-save"]');
+  await u.until(() => /records saved\./.test(u.text()));
+  assert.ok(pushed.length > 0);
+  assert.ok(pushed.every((r) => /^UPL-/.test(r.internal_record_id) && r.synthetic === true), 'stable IDs, never the browser master sequence');
+  u.click('[data-act="wiz-open-nsr"]');
+  await u.until(() => new RegExp(pushed[0].nsr_household_serial).test(u.text()));
+  assert.ok(!u.failed());
+  assert.deepEqual(u.errors, []);
+});
