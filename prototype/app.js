@@ -97,6 +97,8 @@
     wiz: newWizard(), mapSource: 'SRC-NSR-NASSCO', mapDraft: null, mapTab: 'mapping', mapTest: null, mapVal: null, mapNote: '',
     schemaQ: { q: '', object: '', mandatory: '', sens: '', fill: '' },
     reconScope: '', reconOpen: null, lineQ: '', auditQ: '', sourceForm: null, modal: null, toast: null, animating: new Set(), auto: false, payloadView: null,
+    // Send to NSR. Keys live in this object only (page memory), never in storage.
+    nsr: { key: '', submitKey: '', operator: '', cfg: null, households: null, deliveries: null, selected: [], preview: null, result: null, confirm: false, busy: false, error: null, notes: {} },
   };
   function newWizard() { return { step: 1, sourceId: '', mode: '', file: null, upload: null, headerCheck: null, sim: {}, dry: null, ack: false, testResult: null, runId: null, showIssues: false }; }
 
@@ -443,8 +445,9 @@
     const at = attentionTotals();
     const all = S.runs.slice().reverse();
     const runs = UI.tstatus ? all.filter((r) => T.simpleStatus(runState(r)).label === UI.tstatus) : all;
-    const views = [['list', 'All Transfers'], ['attention', `Needs Attention (${num(at.total)})`]];
-    const body = UI.tview === 'attention' ? attentionView() : html`
+    const views = [['list', 'All Transfers'], ['attention', `Needs Attention (${num(at.total)})`]].concat(E.can('nsr.preview') ? [['nsr', 'Send to NSR']] : []);
+    if (UI.tview === 'nsr' && !E.can('nsr.preview')) UI.tview = 'list';
+    const body = UI.tview === 'attention' ? attentionView() : UI.tview === 'nsr' ? nsrView() : html`
       <label class="field inline">Status<select data-change="bind" data-key="tstatus"><option value="">All</option>${T.SIMPLE_STATUSES.map((l) => html`<option value="${l}" ${raw(UI.tstatus === l ? 'selected' : '')}>${l}</option>`)}</select></label>
       <section class="panel"><div class="body flush">${runsTable(runs)}</div></section>`;
     return html`${head('Transfers', null, html`<button class="btn primary" data-act="nav" data-arg="ingest" ${dis('run.start')}>Add Records</button>`)}
@@ -459,6 +462,109 @@
     return html`${act.length ? html`<section class="panel">${retryable.length > 1 ? html`<header><span class="sub">${num(act.length)} issue(s)</span><button class="btn" data-act="retry-all" ${dis('run.retry')}>Retry All (${num(retryable.length)})</button></header>` : ''}<div class="body flush">${groupRows(act)}</div></section>` : html`<div class="callout ok">Nothing needs attention.</div>`}
       ${auto.length ? moreDetails(`Handled automatically (${auto.length})`, groupRows(auto)) : ''}
       ${techAllowed() ? html`<div class="btns"><button class="btn sm ghost" data-act="nav" data-arg="errors">Exception Log</button><button class="btn sm ghost" data-act="nav" data-arg="recon">Reconciliation</button></div>` : ''}`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Send to NSR: the outbound OpenG2P NSR webhook, through the DataBridge API (/api/v1/nsr/...).
+  // The server decides who may submit (DATABRIDGE_NSR_SUBMIT_KEY); the role check here only shapes the screen.
+  // ---------------------------------------------------------------------------
+  const NSR_STATUS = {
+    READY: ['Ready', 'good'], VALIDATION_FAILED: ['Needs correction', 'warn'],
+    PENDING: ['Sending', 'info run'], RETRY_SCHEDULED: ['Will retry', 'info run'], ACCEPTED: ['Received by NSR', 'good'],
+    CONFIRMATION_PENDING: ['Check NSR', 'warn'], REJECTED: ['Rejected by NSR', 'crit'], DELIVERY_FAILED: ['Not delivered', 'crit'],
+  };
+  const NSR_REASONS = {
+    CONSENT_NOT_GIVEN: 'Consent to share data was not given.', CONSENT_MISSING: 'Consent is not recorded for every member.',
+    NO_HEAD: 'No household head is marked.', MULTIPLE_HEADS: 'More than one household head is marked.', HEAD_CONFLICT: 'Head of household details disagree.',
+    MEMBER_COUNT_MISMATCH: 'The member count does not match the members on file.', MEMBER_COUNT_MISSING: 'The member count is missing.',
+    DUPLICATE_MEMBER: 'The same person appears twice.', HOUSEHOLD_FIELD_CONFLICT: 'Members have different household details, for example the address.',
+    MIXED_SYNTHETIC: 'Test and real records are mixed.', SYNTHETIC_NOT_ALLOWED: 'Test records cannot be sent to NSR here.',
+    TOO_MANY_MEMBERS: 'Too many members for one submission.', HOUSEHOLD_NOT_FOUND: 'Household not found.',
+    NSR_WEBHOOK_DISABLED: 'Sending to NSR is switched off in this environment.', NSR_SUBMIT_FORBIDDEN: 'This key cannot send to NSR. Enter the NSR submit key.',
+    UNAUTHORISED: 'The API key was not accepted.', OPERATOR_REQUIRED: 'Enter your name or operator ID.', DUPLICATE_SUBMISSION: 'Already sent, or being sent.',
+    BATCH_TOO_LARGE: 'Too many households at once. Select fewer.', VALIDATION_FAILED: 'Some households need correction first.',
+    CONFIRMATION_REQUIRED: 'Check NSR first, then confirm.', NOT_RETRYABLE: 'This delivery cannot be retried.', NETWORK: 'The DataBridge API cannot be reached from this page.',
+  };
+  const nsrPill = (s) => { const [l, tone] = NSR_STATUS[s] || [label(s), '']; return html`<span class="pill ${tone}">${l}</span>`; };
+  const nsrReason = (code) => NSR_REASONS[code] || 'Something went wrong. Ask an administrator.';
+
+  async function nsrApi(method, path, body, asOperator) {
+    const n = UI.nsr;
+    const headers = { 'X-API-Key': asOperator ? n.submitKey : n.key };
+    if (asOperator) headers['X-Operator-Id'] = n.operator;
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    let res;
+    try { res = await fetch('/api/v1/nsr' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }); } catch (e) { throw Object.assign(new Error('network'), { code: 'NETWORK' }); }
+    let data = null;
+    try { data = await res.json(); } catch (e) { throw Object.assign(new Error('network'), { code: 'NETWORK' }); }
+    if (!res.ok) throw Object.assign(new Error(data.error && data.error.message), { code: data.error && data.error.code, details: data.error && data.error.details, status: res.status });
+    return data;
+  }
+  // Runs one API step, then re-renders. Errors become a plain sentence on the screen.
+  function nsrRun(fn) {
+    UI.nsr.busy = true; UI.nsr.error = null;
+    Promise.resolve().then(fn).catch((e) => { UI.nsr.error = e; }).finally(() => { UI.nsr.busy = false; render(); });
+  }
+  async function nsrLoad() {
+    const n = UI.nsr;
+    n.cfg = await nsrApi('GET', '/config');
+    n.households = (await nsrApi('GET', '/households')).items;
+    n.deliveries = (await nsrApi('GET', '/deliveries?page_size=50')).items;
+  }
+
+  function nsrView() {
+    const n = UI.nsr;
+    const canSend = E.can('nsr.submit');
+    const err = n.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(n.error.code)}</b>${n.error.details && n.error.details.length ? html`<div class="small">${n.error.details.map((d) => html`<div>${d.household_serial || ''} ${d.errors ? d.errors.map((e) => nsrReason(e.code)).join(' ') : nsrReason(d.code)}</div>`)}</div>` : ''}</div>` : '';
+    const connect = html`<section class="panel"><header><b>Connect</b>${n.cfg ? html`<span class="sub">${n.cfg.enabled ? 'Sending is on' : 'Sending is off: you can check households, nothing is sent'}</span>` : ''}</header><div class="body">
+      <div class="filters">
+        <label class="field">API key<input type="password" id="nsr-key" autocomplete="off" data-live data-bind="nsr.key" value="${n.key}"></label>
+        ${canSend ? html`<label class="field">NSR submit key<input type="password" id="nsr-submit-key" autocomplete="off" data-live data-bind="nsr.submitKey" value="${n.submitKey}"></label>
+        <label class="field">Your name or ID<input id="nsr-operator" autocomplete="off" data-live data-bind="nsr.operator" value="${n.operator}" maxlength="64"></label>` : ''}
+        <button class="btn primary" data-act="nsr-connect" ${raw(n.busy || !n.key ? 'disabled' : '')}>${n.households ? 'Refresh' : 'Connect'}</button>
+      </div><div class="small muted">Keys stay in this page only and are cleared when you close it.</div></div></section>`;
+    if (!n.households) return html`${err}${connect}`;
+
+    const ready = n.households.filter((h) => h.status === 'READY');
+    const rows = n.households.map((h) => {
+      const on = n.selected.includes(h.household_serial);
+      return html`<tr><td><input type="checkbox" aria-label="Select ${h.household_serial}" data-act="nsr-toggle" data-arg="${h.household_serial}" ${raw(on ? 'checked' : '')} ${raw(h.status === 'READY' ? '' : 'disabled')}></td>
+        <td>${h.household_serial}</td><td class="num">${num(h.members)}</td><td>${[h.lga_name, h.state_name].filter(Boolean).join(', ')}</td><td>${nsrPill(h.status)}</td>
+        <td class="small">${h.errors.length ? h.errors.map(nsrReason).join(' ') : h.latest_delivery ? html`Last sent: ${nsrPill(h.latest_delivery.status)}` : ''}</td></tr>`;
+    });
+    const pick = html`<section class="panel"><header><b>1. Select households</b><span class="sub">${num(ready.length)} of ${num(n.households.length)} ready</span>
+        <button class="btn" data-act="nsr-preview" ${raw(n.busy || !n.selected.length ? 'disabled' : '')}>Check Selected (${num(n.selected.length)})</button></header>
+      <div class="body flush"><div class="tbl-wrap"><table class="t"><thead><tr><th></th><th>Household</th><th>Members</th><th>Area</th><th>Status</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div></div></section>`;
+
+    const p = n.preview;
+    const review = p ? html`<section class="panel"><header><b>2. Review</b>${nsrPill(p.status)}</header><div class="body stack">
+        ${p.households.map((h) => html`<div><b>${h.household_serial}</b> ${nsrPill(h.status)} <span class="small muted">${num(h.members)} member(s)</span>
+          ${h.errors.length ? html`<ul class="small">${h.errors.map((e) => html`<li>${nsrReason(e.code)}</li>`)}</ul>` : ''}
+          ${h.warnings.length ? moreDetails(`Notes for the NSR team (${h.warnings.length})`, html`<ul class="small">${h.warnings.map((w) => html`<li>${w.field ? html`<b>${w.field}</b>: ` : ''}${w.message}</li>`)}</ul>`) : ''}</div>`)}
+        ${p.request ? moreDetails('Show the request NSR will receive', html`<dl class="kv small"><dt>Method</dt><dd>${p.request.method}</dd><dt>Address</dt><dd>${p.request.url}</dd><dt>Format</dt><dd>${p.request.format}</dd><dt>Values</dt><dd>${p.view === 'full' ? 'Shown in full (test data)' : 'Masked here; NSR receives the stored values'}</dd></dl>
+          <pre class="code">${JSON.stringify(p.request.body, null, 2)}</pre>`) : ''}
+      </div></section>` : '';
+
+    const sendable = p && p.status === 'READY' && n.cfg && n.cfg.enabled;
+    const send = p && canSend ? html`<section class="panel"><header><b>3. Send</b></header><div class="body stack">
+        ${!n.cfg.enabled ? html`<div class="callout warn">${nsrReason('NSR_WEBHOOK_DISABLED')}</div>` : ''}
+        <label class="row confirm"><input type="checkbox" id="nsr-confirm" data-bind="nsr.confirm" data-type="check" ${raw(n.confirm ? 'checked' : '')}> I have reviewed ${num(p.households.length)} household(s) and want to send them to the NSR Household Register.</label>
+        <div class="btns"><button class="btn primary" data-act="nsr-submit" ${dis('nsr.submit')} ${raw(!sendable || !n.confirm || n.busy || !n.submitKey || !n.operator ? 'disabled' : '')}>Send to NSR</button></div>
+      </div></section>` : '';
+
+    const r = n.result;
+    const result = r ? html`<div class="callout ${r.status === 'ACCEPTED' ? 'ok' : ['REJECTED', 'DELIVERY_FAILED'].includes(r.status) ? 'crit' : 'warn'}" role="status">
+        <b>${{ ACCEPTED: 'Sent. NSR received the message.', RETRY_SCHEDULED: 'NSR is busy. DataBridge will try again automatically.', CONFIRMATION_PENDING: 'No clear answer from NSR. Check NSR before sending again.', REJECTED: 'NSR rejected the message.', DELIVERY_FAILED: 'Not delivered.' }[r.status] || 'Sending…'}</b>
+        <div>${r.correlation_id ? html`NSR reference: <b>${r.correlation_id}</b>. ` : ''}${r.status === 'ACCEPTED' ? 'NSR adds households in the background; confirm in the Household Register.' : r.last_reason || ''}</div></div>` : '';
+
+    const dl = n.deliveries || [];
+    const deliveries = html`<section class="panel"><header><b>Deliveries</b><span class="sub">${num(dl.length)}</span></header><div class="body flush">${dl.length ? html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Sent</th><th>Households</th><th>Status</th><th>NSR reference</th><th>Tries</th><th></th></tr></thead><tbody>
+      ${dl.map((d) => html`<tr><td>${fmtTime(Date.parse(d.created_at), false)}</td><td class="small">${d.households.map((h) => h.household_serial).join(', ')}</td><td>${nsrPill(d.status)}</td><td class="small">${d.correlation_id || '—'}</td><td class="num">${num(d.attempt_count)}</td>
+        <td class="num">${['RETRY_SCHEDULED', 'DELIVERY_FAILED'].includes(d.status) && canSend ? html`<button class="btn sm" data-act="nsr-retry" data-arg="${d.id}" ${dis('nsr.submit')}>Retry</button>` : ''}
+        ${d.status === 'CONFIRMATION_PENDING' && canSend ? html`<input class="sm" placeholder="What did you check in NSR?" data-bind="nsr.notes.${d.id}" value="${n.notes[d.id] || ''}">
+          <button class="btn sm" data-act="nsr-reconcile" data-arg="${d.id}|ACCEPTED" ${dis('nsr.submit')}>Found in NSR</button><button class="btn sm" data-act="nsr-reconcile" data-arg="${d.id}|NOT_RECEIVED" ${dis('nsr.submit')}>Not in NSR</button>` : ''}</td></tr>`)}
+      </tbody></table></div>${moreDetails('Advanced details', html`<pre class="code">${JSON.stringify(dl.map((d) => ({ id: d.id, status: d.status, message_id: d.message_id, ack: d.ack, registry_commit: d.registry_commit, last_reason: d.last_reason, next_attempt_at: d.next_attempt_at, reconciliation: d.reconciliation })), null, 2)}</pre>`)}` : html`<div class="empty">Nothing sent yet.</div>`}</div></section>`;
+    return html`${err}${connect}${result}${pick}${review}${send}${deliveries}`;
   }
 
   // Record IDs with an open issue that needs a person. Shared by the transfer summary and its lists.
@@ -1255,6 +1361,23 @@
   const ACTIONS = {
     nav: (p) => { if (p === 'ingest' && UI.page !== 'ingest') UI.wiz = UI.wiz.step > 1 && !UI.wiz.runId ? UI.wiz : newWizard(); go(p, p === 'lineage' ? { recordId: null } : null); },
     tview: (v) => { UI.tview = v; UI.errOpen = null; },
+    'nsr-connect': () => nsrRun(nsrLoad),
+    'nsr-toggle': (serial) => { const s = UI.nsr.selected; UI.nsr.selected = s.includes(serial) ? s.filter((x) => x !== serial) : s.concat(serial); UI.nsr.preview = null; UI.nsr.confirm = false; },
+    'nsr-preview': () => nsrRun(async () => { UI.nsr.result = null; UI.nsr.confirm = false; UI.nsr.preview = await nsrApi('POST', '/preview', { household_serials: UI.nsr.selected }); }),
+    'nsr-submit': () => nsrRun(async () => {
+      const serials = UI.nsr.selected;
+      UI.nsr.result = serials.length === 1
+        ? await nsrApi('POST', '/submit', { household_serial: serials[0], confirm: true }, true)
+        : await nsrApi('POST', '/submit/batch', { household_serials: serials, confirm: true }, true);
+      Object.assign(UI.nsr, { selected: [], preview: null, confirm: false });
+      await nsrLoad();
+    }),
+    'nsr-retry': (id) => nsrRun(async () => { UI.nsr.result = await nsrApi('POST', `/deliveries/${id}/retry`, {}, true); await nsrLoad(); }),
+    'nsr-reconcile': (arg) => nsrRun(async () => {
+      const [id, outcome] = arg.split('|');
+      UI.nsr.result = await nsrApi('POST', `/deliveries/${id}/reconcile`, { outcome, note: UI.nsr.notes[id] || '' }, true);
+      await nsrLoad();
+    }),
     goto: (t) => {
       const m = { 'errors-dead': ['errors', { tab: 'dead' }], 'errors-retry': ['errors', { tab: 'info', code: 'MASTER_WRITE_FAILED' }], 'errors-review': ['errors', { tab: 'action', code: 'MATCH_REQUIRES_REVIEW' }], 'errors-validation': ['errors', { tab: 'action' }] }[t];
       if (m) go(m[0], { errQ: { ...UI.errQ, code: '', sourceId: '', ...m[1] } }); else go(t);

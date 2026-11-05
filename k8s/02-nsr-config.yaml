@@ -1,0 +1,26 @@
+# Outbound OpenG2P NSR webhook settings (not secret). The webhook stays OFF until the NSR team confirms
+# partner registration, IDs, template, signature and network access (see docs/operations/nsr-deployment-runbook.md).
+# Secrets (NSR_WEBHOOK_SIGNATURE, DATABRIDGE_NSR_SUBMIT_KEY) are in the Secret databridge-nsr-secrets, created by hand.
+# After changing this ConfigMap: k -n cct-databridge rollout restart deploy/databridge-backend
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: databridge-nsr-config
+  namespace: cct-databridge
+data:
+  NSR_WEBHOOK_ENABLED: "false"
+  NSR_WEBHOOK_BASE_URL: https://staff-nsr.openg2p.dpiforall.com
+  NSR_WEBHOOK_DATA_MODEL: CCT_DATABRIDGE_INTAKE
+  NSR_WEBHOOK_REGISTER_ID: a0000000-0000-4000-8000-000000000002
+  NSR_WEBHOOK_INTAKE_FORM_ID: c1000000-0000-4000-8000-000000000002
+  NSR_WEBHOOK_PARTNER_ID: CCT_DATABRIDGE
+  # This deployment holds synthetic records only. Turn on only for an approved synthetic test in staging.
+  NSR_WEBHOOK_ALLOW_SYNTHETIC: "false"
+  # Below the frontend proxy's 30 s read timeout, so a submit request always gets an answer.
+  NSR_WEBHOOK_TIMEOUT_MS: "20000"
+  NSR_WEBHOOK_MAX_RETRIES: "5"
+  NSR_WEBHOOK_RETRY_BASE_MS: "30000"
+  NSR_WEBHOOK_RETRY_MAX_MS: "1800000"
+  NSR_WEBHOOK_MAX_BATCH_HOUSEHOLDS: "50"
+  NSR_WEBHOOK_MAX_MEMBERS: "50"
+  NSR_WEBHOOK_MAX_BODY_BYTES: "2097152"

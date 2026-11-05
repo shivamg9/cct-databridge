@@ -17,6 +17,7 @@ Browser ──HTTPS──▶ 13.233.236.183 = nginx front proxy "pritunl" (172.3
 |---|---|
 | `00-namespace.yaml` | Namespace `cct-databridge` (Pod Security `restricted`) |
 | `01-pvc.yaml` | 1Gi `nfs-csi` volume for the backend record store |
+| `02-nsr-config.yaml` | ConfigMap `databridge-nsr-config`: NSR webhook settings, **off** (`NSR_WEBHOOK_ENABLED: "false"`) |
 | `10-backend.yaml` | Backend Deployment (1 replica, `Recreate`) + Service `backend` |
 | `20-frontend.yaml` | Frontend Deployment (1 replica) + Service |
 | `30-virtualservice.yaml` | Istio VirtualService on the existing `dev/internal` gateway |
@@ -32,6 +33,7 @@ Design notes:
 - Demo mode is fixed (`DATABRIDGE_MODE=demo`): synthetic records only.
 - `DATABRIDGE_UNMASKED_PULL: "true"` in `10-backend.yaml`: pull returns the stored synthetic values (`"view": "full"`); the API key is still required. Set it to `"false"` for masked pulls. The backend refuses to start if this is combined with integration mode.
 - Every pulled record has all 145 build-sheet fields; absent ones are `null`.
+- The outbound NSR webhook is off. Its secrets (Secret `databridge-nsr-secrets`) are optional while it is off. Enabling it is a separate, gated procedure: [../docs/operations/nsr-deployment-runbook.md](../docs/operations/nsr-deployment-runbook.md).
 - Both pods run as non-root with a read-only root filesystem.
 
 ## Prerequisites
@@ -53,10 +55,10 @@ The server is x86_64, so build for `linux/amd64`.
 docker login
 ```
 ```bash
-docker buildx build --platform linux/amd64 -t oorudigital/cct-databridge-backend:0.6.0 -f Dockerfile --push .
+docker buildx build --platform linux/amd64 -t oorudigital/cct-databridge-backend:0.7.0 -f Dockerfile --push .
 ```
 ```bash
-docker buildx build --platform linux/amd64 -t oorudigital/cct-databridge-frontend:0.5.0 -f docker/frontend.Dockerfile --push .
+docker buildx build --platform linux/amd64 -t oorudigital/cct-databridge-frontend:0.7.0 -f docker/frontend.Dockerfile --push .
 ```
 
 The other apps on this cluster pull public Docker Hub images without pull secrets. If you make these repos private, create an image pull secret in `cct-databridge` and add `imagePullSecrets` to both Deployments.

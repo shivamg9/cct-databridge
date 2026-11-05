@@ -158,14 +158,16 @@
     ['report.download', 'Download reports'],
     ['audit.view', 'View audit log'],
     ['security.view', 'View security configuration'],
+    ['nsr.preview', 'Check households and view NSR deliveries'],
+    ['nsr.submit', 'Send households to the NSR Household Register'],
   ];
 
   const ROLES = {
-    PLATFORM_ADMIN: { label: 'Platform Administrator', perms: ['source.edit', 'source.toggle', 'source.test', 'mapping.edit', 'destination.edit', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download', 'audit.view', 'security.view'] },
+    PLATFORM_ADMIN: { label: 'Platform Administrator', perms: ['source.edit', 'source.toggle', 'source.test', 'mapping.edit', 'destination.edit', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download', 'audit.view', 'security.view', 'nsr.preview', 'nsr.submit'] },
     SOURCE_CONFIG_ADMIN: { label: 'Source Configuration Administrator', perms: ['source.edit', 'source.toggle', 'source.test', 'mapping.edit', 'run.start'] },
-    INGESTION_OPERATOR: { label: 'Ingestion Operator', perms: ['source.test', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download'] },
-    DATA_QUALITY_ANALYST: { label: 'Data Quality Analyst', perms: ['error.resolve', 'payload.view', 'report.download'] },
-    AUDITOR: { label: 'Auditor', perms: ['audit.view', 'security.view', 'report.download'] },
+    INGESTION_OPERATOR: { label: 'Ingestion Operator', perms: ['source.test', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download', 'nsr.preview', 'nsr.submit'] },
+    DATA_QUALITY_ANALYST: { label: 'Data Quality Analyst', perms: ['error.resolve', 'payload.view', 'report.download', 'nsr.preview'] },
+    AUDITOR: { label: 'Auditor', perms: ['audit.view', 'security.view', 'report.download', 'nsr.preview'] },
     READ_ONLY: { label: 'Read-Only Viewer', perms: [] },
   };
 

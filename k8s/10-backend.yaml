@@ -24,7 +24,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: backend
-          image: cct-databridge-backend:0.6.0     # overridden by kustomization.yaml "images:"
+          image: cct-databridge-backend:0.7.0     # overridden by kustomization.yaml "images:"
           imagePullPolicy: IfNotPresent
           args: ["node", "server/api.js", "--seed-demo"]
           ports:
@@ -42,6 +42,17 @@ spec:
             - name: DATABRIDGE_API_KEY
               valueFrom:
                 secretKeyRef: { name: databridge-secrets, key: DATABRIDGE_API_KEY }
+            # NSR webhook secrets. optional: the pod starts without them while NSR_WEBHOOK_ENABLED is "false";
+            # with it "true" and either missing, the backend refuses to start (fail closed).
+            - name: NSR_WEBHOOK_SIGNATURE
+              valueFrom:
+                secretKeyRef: { name: databridge-nsr-secrets, key: NSR_WEBHOOK_SIGNATURE, optional: true }
+            - name: DATABRIDGE_NSR_SUBMIT_KEY
+              valueFrom:
+                secretKeyRef: { name: databridge-nsr-secrets, key: DATABRIDGE_NSR_SUBMIT_KEY, optional: true }
+          # Non-secret NSR webhook settings (webhook off by default).
+          envFrom:
+            - configMapRef: { name: databridge-nsr-config }
           readinessProbe:
             httpGet: { path: /api/v1/health, port: http }
             periodSeconds: 10

@@ -4,6 +4,7 @@ namespace: cct-databridge
 resources:
   - 00-namespace.yaml
   - 01-pvc.yaml
+  - 02-nsr-config.yaml
   - 10-backend.yaml
   - 20-frontend.yaml
   - 30-virtualservice.yaml
@@ -12,7 +13,7 @@ resources:
 images:
   - name: cct-databridge-backend
     newName: oorudigital/cct-databridge-backend
-    newTag: "0.6.0"
+    newTag: "0.7.0"
   - name: cct-databridge-frontend
     newName: oorudigital/cct-databridge-frontend
-    newTag: "0.5.0"
+    newTag: "0.7.0"

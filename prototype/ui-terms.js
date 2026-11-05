@@ -93,6 +93,7 @@
     'mapping.edit': 'edit field mappings', 'destination.edit': 'edit destinations', 'run.start': 'start transfers',
     'run.retry': 'retry records', 'run.reconcile': 'reconcile transfers', 'error.resolve': 'resolve exceptions',
     'payload.view': 'view source payloads', 'report.download': 'download reports', 'audit.view': 'view the audit log', 'security.view': 'view access control',
+    'nsr.preview': 'check households for NSR', 'nsr.submit': 'send households to NSR',
   };
   const AUDIT_ACTIONS = {
     AUTHZ_DENIED: 'Access denied', ERROR_ACKNOWLEDGED: 'Exception reviewed', ROLE_SWITCHED: 'Role changed', RUN_STARTED: 'Transfer started', RUN_START_BLOCKED: 'Transfer blocked',

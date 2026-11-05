@@ -9,6 +9,7 @@ const SCHEMA = require(path.join(root, 'prototype/schema.js'));
 const { SYSTEM_DEFAULTS } = require(path.join(root, 'server/records.js'));
 const sample = JSON.parse(fs.readFileSync(path.join(root, 'docs/samples/openg2p-push-record.json'), 'utf8'));
 const canonical = SCHEMA.fields.map((f) => f.name);
+const NSR_IDS = { register: 'a0000000-0000-4000-8000-000000000002', form: 'c1000000-0000-4000-8000-000000000002' };
 
 const lines = (s) => s.trim().split('\n');
 const ev = (listen, src) => ({ listen, script: { type: 'text/javascript', exec: lines(src) } });
@@ -91,7 +92,9 @@ expected_view in the environment says what pull should return: "full" when the s
 
 Run the whole collection in order (Runner). "02 Push" creates fresh synthetic records with IDs PM-TEST-<timestamp> on every run; later folders depend on them. Demo mode accepts synthetic data only (synthetic=true, NINs starting with 99), so never put real beneficiary data here.
 
-"08 Integration mode" runs only against a server in integration mode (use the "Local Integration" environment with full_access_key set); elsewhere it is skipped. Folder 07 needs the nginx frontend, so leave it out for a bare API server.`).join('\n'),
+"08 Integration mode" runs only against a server in integration mode (use the "Local Integration" environment with full_access_key set); elsewhere it is skipped. Folder 07 needs the nginx frontend, so leave it out for a bare API server.
+
+"09 NSR webhook" previews synthetic test households. Its submit requests run only where the environment sets nsr_submit_allowed = "true" (the Local NSR Mock environment, with nsr_submit_key set); everywhere else they are skipped, so it never sends to a real NSR.`).join('\n'),
     schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
   },
   variable: [
@@ -102,6 +105,12 @@ Run the whole collection in order (Runner). "02 Push" creates fresh synthetic re
     { key: 'server_mode', value: '' },
     { key: 'record_id', value: '' },
     { key: 'run_started', value: '' },
+    { key: 'nsr_enabled', value: '' },
+    { key: 'nsr_allow_synthetic', value: '' },
+    { key: 'nsr_run', value: '' },
+    { key: 'nsr_hh_a', value: '' },
+    { key: 'nsr_hh_b', value: '' },
+    { key: 'nsr_delivery_id', value: '' },
   ],
   event: [
     ev('test', `
@@ -385,6 +394,146 @@ const it = b.items.find((i) => i.record.internal_record_id === pm.collectionVari
 pm.test('Stored NIN returned', () => pm.expect(it && it.record.nin).to.eql('99000001035'));`,
       }),
     ]),
+    folder('09 NSR webhook', 'Outbound OpenG2P NSR webhook. Pushes two synthetic test households (PM-HH-<timestamp>-A with 2 members, -B with 1), previews them and, only where the environment sets nsr_submit_allowed = "true" (the Local NSR Mock environment), submits them. Submit requests are skipped everywhere else, so this folder never sends to a real NSR.', [
+      req('NSR config', {
+        p: '/api/v1/nsr/config',
+        test: `
+pm.test('Status 200', () => pm.response.to.have.status(200));
+const c = pm.response.json();
+pm.test('Partner and IDs from the specification', () => { pm.expect(c.partner_id).to.eql('CCT_DATABRIDGE'); pm.expect(c.data_model).to.eql('CCT_DATABRIDGE_INTAKE'); pm.expect(c.register_id).to.eql('${NSR_IDS.register}'); pm.expect(c.intake_form_id).to.eql('${NSR_IDS.form}'); });
+pm.test('Endpoint carries the three query parameters', () => pm.expect(c.endpoint).to.include('/partner/ingest_data?data_model=CCT_DATABRIDGE_INTAKE&register_id=${NSR_IDS.register}&intake_form_id=${NSR_IDS.form}'));
+pm.test('Secrets are reported as present or absent, never shown', () => { pm.expect(c.signature_configured).to.be.a('boolean'); pm.expect(c).to.not.have.property('signature'); pm.expect(c).to.not.have.property('submit_key'); });
+pm.collectionVariables.set('nsr_enabled', String(c.enabled));
+pm.collectionVariables.set('nsr_allow_synthetic', String(c.allow_synthetic));`,
+      }),
+      req('NSR - no key (401)', {
+        p: '/api/v1/nsr/households', noauth: true,
+        test: `pm.test('Status 401', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().error.code).to.eql('UNAUTHORISED'); });`,
+      }),
+      req('NSR - wrong key (401)', {
+        method: 'POST', p: '/api/v1/nsr/preview', noauth: true, headers: [{ key: 'X-API-Key', value: 'not-the-key' }], body: '{"household_serials":["X"]}',
+        test: `pm.test('Status 401', () => pm.response.to.have.status(401));`,
+      }),
+      ...[['A', 1, 2], ['A', 2, 2], ['B', 1, 1]].map(([hh, m, count]) => req(`NSR - push test household ${hh}, member ${m}`, {
+        method: 'POST', p: '/api/v1/records', body: '{{nsr_body}}',
+        pre: `
+${hh === 'A' && m === 1 ? "pm.collectionVariables.set('nsr_run', String(Date.now()));" : ''}
+const run = pm.collectionVariables.get('nsr_run');
+const serial = 'PM-HH-' + run + '-${hh}';
+pm.collectionVariables.set('nsr_hh_${hh.toLowerCase()}', serial);
+const r = JSON.parse(pm.collectionVariables.get('sample_record'));
+Object.assign(r, { internal_record_id: serial + '-M${m}', nsr_household_serial: serial, member_count: ${count}, nin: '99' + run.slice(-8) + '${hh === 'A' ? m : 3}' });
+${m === 1 ? "Object.assign(r, { relationship_to_head: '1', is_household_head: true });" : "Object.assign(r, { given_name: 'Funke', relationship_to_head: '3', is_household_head: false, marital_status: '5', birth_date: '2012-04-18', phone_number: '+2348010040001' }); delete r.bvn; delete r.account_number; delete r.account_name; delete r.bank_name;"}
+pm.variables.set('nsr_body', JSON.stringify(r));`,
+        test: `pm.test('Created (201)', () => pm.response.to.have.status(201));`,
+      })),
+      req('NSR households', {
+        p: '/api/v1/nsr/households',
+        test: `
+pm.test('Status 200', () => pm.response.to.have.status(200));
+const b = pm.response.json();
+const a = b.items.find((h) => h.household_serial === pm.collectionVariables.get('nsr_hh_a'));
+pm.test('Test household A listed with 2 members', () => { pm.expect(a).to.be.an('object'); pm.expect(a.members).to.eql(2); });
+pm.test('Every household has a status', () => b.items.forEach((h) => pm.expect(['READY', 'VALIDATION_FAILED']).to.include(h.status)));
+pm.test('No personal values in the list', () => pm.expect(pm.response.text()).to.not.match(/99\\d{9}|\\+234\\d/));`,
+      }),
+      req('NSR preview - household A', {
+        method: 'POST', p: '/api/v1/nsr/preview', body: '{"household_serials":["{{nsr_hh_a}}"]}',
+        test: `
+pm.test('Status 200', () => pm.response.to.have.status(200));
+const b = pm.response.json();
+const h = b.households[0];
+const synthOk = pm.collectionVariables.get('nsr_allow_synthetic') === 'true';
+pm.test(synthOk ? 'READY' : 'Blocked: synthetic records not allowed here', () => synthOk ? pm.expect(h.status).to.eql('READY') : pm.expect(h.errors.map((e) => e.code)).to.include('SYNTHETIC_NOT_ALLOWED'));
+pm.test('Exact endpoint and Content-Type', () => { pm.expect(b.request.url).to.include('/partner/ingest_data?data_model=CCT_DATABRIDGE_INTAKE&register_id=${NSR_IDS.register}&intake_form_id=${NSR_IDS.form}'); pm.expect(b.request.headers).to.eql({ 'Content-Type': 'application/json' }); });
+const env = b.request.body;
+pm.test('Envelope: header, signature, message', () => { pm.expect(Object.keys(env)).to.eql(['header', 'signature', 'message']); pm.expect(env.header.sender_id).to.eql('CCT_DATABRIDGE'); pm.expect(env.header.timestamp).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$/); });
+pm.test('Signature value is never shown', () => pm.expect(env.signature).to.include('not shown'));
+const m = env.message;
+pm.test('Single household object', () => { pm.expect(b.request.format).to.eql('single'); pm.expect(m.individual_sn).to.eql(pm.collectionVariables.get('nsr_hh_a')); });
+pm.test('Household fields once, members in household_members', () => { pm.expect(m.total_heads).to.eql(2); pm.expect(m.household_members.length).to.eql(2); pm.expect(m.household_members.map((x) => x.relationship)).to.eql(['HEAD', 'CHILD']); });
+pm.test('Consent sent explicitly as YES', () => pm.expect(m.consent).to.eql('YES'));
+pm.test('Aliases: surname, firstname, sex, maritalstatus, validnin', () => { const x = m.household_members[0]; pm.expect(x.surname).to.eql('Eze'); pm.expect(x.firstname).to.eql('Chinedu'); pm.expect(x.sex).to.eql('MALE'); pm.expect(x.maritalstatus).to.eql('MARRIED'); pm.expect(x.validnin).to.eql('YES'); });
+pm.test('Values NSR would default are reported, not invented', () => { pm.expect(m).to.not.have.property('sponsor'); pm.expect(h.warnings.map((w) => w.field)).to.include('sponsor'); });`,
+      }),
+      req('NSR preview - batch A and B, array format', {
+        method: 'POST', p: '/api/v1/nsr/preview', body: '{"household_serials":["{{nsr_hh_a}}","{{nsr_hh_b}}"],"batch_format":"array"}',
+        test: `
+pm.test('Status 200', () => pm.response.to.have.status(200));
+const b = pm.response.json();
+pm.test('Message is an array of two households', () => { pm.expect(b.request.format).to.eql('array'); pm.expect(b.request.body.message).to.be.an('array').with.lengthOf(2); });`,
+      }),
+      req('NSR preview - batch, records format', {
+        method: 'POST', p: '/api/v1/nsr/preview', body: '{"household_serials":["{{nsr_hh_a}}","{{nsr_hh_b}}"]}',
+        test: `pm.test('message.records holds two households', () => pm.expect(pm.response.json().request.body.message.records).to.have.lengthOf(2));`,
+      }),
+      req('NSR preview - unknown household', {
+        method: 'POST', p: '/api/v1/nsr/preview', body: '{"household_serials":["PM-HH-DOES-NOT-EXIST"]}',
+        test: `
+pm.test('Status 200', () => pm.response.to.have.status(200));
+const b = pm.response.json();
+pm.test('VALIDATION_FAILED: HOUSEHOLD_NOT_FOUND', () => { pm.expect(b.status).to.eql('VALIDATION_FAILED'); pm.expect(b.households[0].errors[0].code).to.eql('HOUSEHOLD_NOT_FOUND'); });`,
+      }),
+      req('NSR preview - invalid request (400)', {
+        method: 'POST', p: '/api/v1/nsr/preview', body: '{"household_serials":"not-a-list"}',
+        test: `pm.test('400 INVALID_REQUEST', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('INVALID_REQUEST'); });`,
+      }),
+      req('NSR submit - webhook disabled (503)', {
+        method: 'POST', p: '/api/v1/nsr/submit', body: '{"household_serial":"{{nsr_hh_a}}","confirm":true}',
+        pre: `if (pm.collectionVariables.get('nsr_enabled') !== 'false') pm.execution.skipRequest(); // only where the webhook is off`,
+        test: `pm.test('503 NSR_WEBHOOK_DISABLED, nothing sent', () => { pm.response.to.have.status(503); pm.expect(pm.response.json().error.code).to.eql('NSR_WEBHOOK_DISABLED'); });`,
+      }),
+      req('NSR submit - standard key refused (403)', {
+        method: 'POST', p: '/api/v1/nsr/submit', body: '{"household_serial":"{{nsr_hh_a}}","confirm":true}', headers: [{ key: 'X-Operator-Id', value: '{{nsr_operator}}' }],
+        pre: `if (pm.collectionVariables.get('nsr_enabled') !== 'true') pm.execution.skipRequest();`,
+        test: `pm.test('403 NSR_SUBMIT_FORBIDDEN', () => { pm.response.to.have.status(403); pm.expect(pm.response.json().error.code).to.eql('NSR_SUBMIT_FORBIDDEN'); });`,
+      }),
+      ...[
+        ['NSR submit - single household', '/api/v1/nsr/submit', '{"household_serial":"{{nsr_hh_a}}","confirm":true}', `
+pm.test('201', () => pm.response.to.have.status(201));
+const d = pm.response.json();
+pm.test('ACCEPTED, with the NSR correlation ID', () => { pm.expect(d.status).to.eql('ACCEPTED'); pm.expect(d.correlation_id).to.be.a('string').and.not.empty; pm.expect(d.ack.ack_status).to.eql('ACK'); });
+pm.test('An ACK is not registry creation', () => pm.expect(d.registry_commit).to.eql('NOT_CONFIRMED'));
+pm.test('Operator recorded', () => pm.expect(d.created_by).to.eql(pm.environment.get('nsr_operator')));
+pm.collectionVariables.set('nsr_delivery_id', d.id);`],
+        ['NSR submit - duplicate refused (409)', '/api/v1/nsr/submit', '{"household_serial":"{{nsr_hh_a}}","confirm":true}', `
+pm.test('409 DUPLICATE_SUBMISSION', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().error.details[0].code).to.eql('ALREADY_ACCEPTED'); });`],
+        ['NSR submit - batch (message.records)', '/api/v1/nsr/submit/batch', '{"household_serials":["{{nsr_hh_b}}"],"batch_format":"records","confirm":true}', `
+pm.test('201 ACCEPTED, records format', () => { pm.response.to.have.status(201); const d = pm.response.json(); pm.expect(d.status).to.eql('ACCEPTED'); pm.expect(d.format).to.eql('records'); });`],
+        ['NSR submit - invalid household (422)', '/api/v1/nsr/submit', '{"household_serial":"PM-HH-DOES-NOT-EXIST","confirm":true}', `
+pm.test('422 VALIDATION_FAILED, nothing sent', () => { pm.response.to.have.status(422); pm.expect(pm.response.json().error.details[0].errors[0].code).to.eql('HOUSEHOLD_NOT_FOUND'); });`],
+        ['NSR submit - without confirm (400)', '/api/v1/nsr/submit', '{"household_serial":"{{nsr_hh_a}}"}', `
+pm.test('400 CONFIRMATION_REQUIRED', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.eql('CONFIRMATION_REQUIRED'); });`],
+      ].map(([name, p, body, test]) => req(name, {
+        method: 'POST', p, body, noauth: true,
+        headers: [{ key: 'X-API-Key', value: '{{nsr_submit_key}}' }, { key: 'X-Operator-Id', value: '{{nsr_operator}}' }],
+        pre: `// Never against a real NSR: only where the environment allows it and the webhook is on.
+if (pm.environment.get('nsr_submit_allowed') !== 'true' || pm.collectionVariables.get('nsr_enabled') !== 'true') pm.execution.skipRequest();`,
+        test,
+      })),
+      req('NSR deliveries', {
+        p: '/api/v1/nsr/deliveries', query: [['household_serial', '{{nsr_hh_a}}']],
+        test: `
+pm.test('Status 200', () => pm.response.to.have.status(200));
+const b = pm.response.json();
+pm.test('Paged list', () => { pm.expect(b.items).to.be.an('array'); pm.expect(b.total).to.be.a('number'); });
+pm.test('No payloads in the list', () => b.items.forEach((d) => pm.expect(d).to.not.have.property('messages')));
+if (pm.environment.get('nsr_submit_allowed') === 'true' && pm.collectionVariables.get('nsr_enabled') === 'true') pm.test('The submitted delivery is listed', () => pm.expect(b.items.map((d) => d.id)).to.include(pm.collectionVariables.get('nsr_delivery_id')));`,
+      }),
+      req('NSR delivery detail', {
+        p: '/api/v1/nsr/deliveries/{{nsr_delivery_id}}',
+        pre: `if (!pm.collectionVariables.get('nsr_delivery_id') || pm.environment.get('nsr_submit_allowed') !== 'true') pm.execution.skipRequest();`,
+        test: `
+pm.test('Status 200', () => pm.response.to.have.status(200));
+const d = pm.response.json();
+pm.test('Attempts with HTTP status and outcome', () => { pm.expect(d.attempts[0].http_status).to.eql(200); pm.expect(d.attempts[0].outcome).to.eql('ACCEPTED'); });
+pm.test('Payload not returned after submission', () => pm.expect(d).to.not.have.property('messages'));`,
+      }),
+      req('NSR delivery - unknown (404)', {
+        p: '/api/v1/nsr/deliveries/dlv-does-not-exist',
+        test: `pm.test('404 NOT_FOUND', () => { pm.response.to.have.status(404); pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'); });`,
+      }),
+    ]),
   ],
 };
 
@@ -394,6 +543,10 @@ const env = (name, base, view, extra) => ({
     { key: 'base_url', value: base, type: 'default', enabled: true },
     { key: 'api_key', value: '', type: 'secret', enabled: true },
     { key: 'expected_view', value: view, type: 'default', enabled: true },
+    // NSR submit: the key is entered by hand; submissions run only where nsr_submit_allowed is "true".
+    { key: 'nsr_submit_key', value: '', type: 'secret', enabled: true },
+    { key: 'nsr_operator', value: 'postman.tester', type: 'default', enabled: true },
+    { key: 'nsr_submit_allowed', value: '', type: 'default', enabled: true },
     ...(extra || []),
   ],
   _postman_variable_scope: 'environment',
@@ -405,6 +558,10 @@ const write = (f, v) => fs.writeFileSync(path.join(out, f), JSON.stringify(v, nu
 write('CCT-DataBridge.postman_collection.json', collection);
 write('CCT-DataBridge-Live.postman_environment.json', env('CCT DataBridge - Live', 'https://databridge.openg2p.dpiforall.com', 'full'));
 write('CCT-DataBridge-Local.postman_environment.json', env('CCT DataBridge - Local Docker', 'http://127.0.0.1:8080', 'full'));
+write('CCT-DataBridge-Local-NSR-Mock.postman_environment.json', {
+  ...env('CCT DataBridge - Local NSR Mock', 'http://127.0.0.1:8080', 'full'),
+  values: env('', 'http://127.0.0.1:8080', 'full').values.map((v) => (v.key === 'nsr_submit_allowed' ? { ...v, value: 'true' } : v)),
+});
 write('CCT-DataBridge-Local-Integration.postman_environment.json', env('CCT DataBridge - Local Integration', 'http://127.0.0.1:18081', 'masked',
   [{ key: 'full_access_key', value: '', type: 'secret', enabled: true }]));
 const n = (items) => items.reduce((a, i) => a + (i.item ? n(i.item) : 1), 0);

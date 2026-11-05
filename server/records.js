@@ -247,4 +247,4 @@ function seedFromIngestion(store) {
   return added;
 }
 
-module.exports = { validateRecord, pushRecord, pullRecords, maskRecord, expandRecord, createStore, seedFromIngestion, FIELDS, CANONICAL, SYSTEM_DEFAULTS, MASK, ORIGINS };
+module.exports = { validateRecord, pushRecord, pullRecords, maskRecord, maskValue, expandRecord, createStore, seedFromIngestion, hash, stable, FIELDS, CANONICAL, SYSTEM_DEFAULTS, MASK, ORIGINS };

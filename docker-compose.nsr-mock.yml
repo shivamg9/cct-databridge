@@ -1,0 +1,40 @@
+# Local NSR workflow against a MOCK of /partner/ingest_data. Never points at the real NSR.
+#   docker compose -f docker-compose.yml -f docker-compose.nsr-mock.yml up --build -d
+#   curl -s http://127.0.0.1:8090/__mock/received          what the mock received
+#   curl -s -X POST http://127.0.0.1:8090/__mock/responses -H "Content-Type: application/json" -d '[{"status":503}]'
+# Back to the plain demo stack (webhook off): docker compose up -d
+services:
+  nsr-mock:
+    image: node:22-alpine
+    command: ["node", "/mock/nsr-mock-server.js"]
+    environment:
+      MOCK_PORT: "8090"
+    volumes:
+      - ./scripts/nsr-mock-server.js:/mock/nsr-mock-server.js:ro
+    ports:
+      - "127.0.0.1:8090:8090"   # localhost only, to inspect what was received
+    user: node
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8090/__mock/received"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  backend:
+    environment:
+      NSR_WEBHOOK_ENABLED: "true"
+      NSR_WEBHOOK_BASE_URL: http://nsr-mock:8090
+      NSR_WEBHOOK_INSECURE_TEST_ENDPOINT: "true"     # plain http, mock only
+      NSR_WEBHOOK_ALLOW_SYNTHETIC: "true"
+      NSR_WEBHOOK_SIGNATURE: local-mock-signature    # not a secret: the mock ignores it
+      DATABRIDGE_NSR_SUBMIT_KEY: ${DATABRIDGE_NSR_SUBMIT_KEY:?Set DATABRIDGE_NSR_SUBMIT_KEY in .env (see .env.example)}
+      NSR_WEBHOOK_RETRY_BASE_MS: "5000"
+      NSR_WEBHOOK_RETRY_MAX_MS: "60000"
+      # Mock deliveries are kept apart from any real delivery history on the same volume.
+      NSR_WEBHOOK_DELIVERY_FILE: /data/mock-nsr-deliveries.json
+    depends_on:
+      nsr-mock:
+        condition: service_healthy

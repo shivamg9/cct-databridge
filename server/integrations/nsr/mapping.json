@@ -1,0 +1,2863 @@
+{
+  "spec": {
+    "document": "docs/architecture/CCT_DataBridge_NSR_Webhook_Specification.md",
+    "version": "1.1"
+  },
+  "classifications": {
+    "DIRECT": "Same meaning and value format; sent under the NSR key.",
+    "ALIAS": "The spec lists the DataBridge key as an accepted alias; sent under the NSR key.",
+    "TRANSFORMED": "Value converted to the documented NSR value.",
+    "DERIVED": "Computed from DataBridge values without inventing data.",
+    "MISSING": "DataBridge does not collect this; never sent.",
+    "REVIEW_REQUIRED": "Needs confirmation from the NSR team (value vocabulary, meaning or format)."
+  },
+  "household": [
+    {
+      "section": "context",
+      "target": "internal_record_id",
+      "aliases": [
+        "internal_record_id"
+      ],
+      "source": "internal_record_id",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": "The household head's DataBridge record ID."
+    },
+    {
+      "section": "context",
+      "target": "nsr_household_serial",
+      "aliases": [
+        "nsr_household_serial"
+      ],
+      "source": "nsr_household_serial",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": "Grouping key for the household."
+    },
+    {
+      "section": "context",
+      "target": "state_name",
+      "aliases": [
+        "state_name"
+      ],
+      "source": "state_name",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "context",
+      "target": "lga_name",
+      "aliases": [
+        "lga_name"
+      ],
+      "source": "lga_name",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "context",
+      "target": "ward",
+      "aliases": [
+        "ward"
+      ],
+      "source": "ward",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "survey_consent",
+      "target": "sponsor",
+      "aliases": [
+        "sponsor"
+      ],
+      "source": "survey_sponsor",
+      "transform": "code_map",
+      "type": "string",
+      "spec_default": "FEDERAL_GOVERNMENT",
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Build-sheet sponsors (UNICEF, GIZ, NG CARES, State, AfDB, WFP, Others) do not match the NSR list. Mapped provisionally: State -> STATE_GOVERNMENT, Others -> OTHER, the rest -> DEVELOPMENT_PARTNER (NG CARES is federal, World Bank financed: confirm). If absent, NSR records FEDERAL_GOVERNMENT.",
+      "values": {
+        "1": "DEVELOPMENT_PARTNER",
+        "2": "DEVELOPMENT_PARTNER",
+        "3": "DEVELOPMENT_PARTNER",
+        "4": "STATE_GOVERNMENT",
+        "5": "DEVELOPMENT_PARTNER",
+        "6": "DEVELOPMENT_PARTNER",
+        "7": "OTHER"
+      }
+    },
+    {
+      "section": "survey_consent",
+      "target": "other_sponsor",
+      "aliases": [
+        "other_sponsor"
+      ],
+      "source": "survey_sponsor_other",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "survey_consent",
+      "target": "consent",
+      "aliases": [
+        "consent",
+        "consent_to_share_data"
+      ],
+      "source": "consent_to_share_data",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": "YES",
+      "classification": "TRANSFORMED",
+      "notes": "Always sent. A household is blocked unless every member record has consent_to_share_data = true. The NSR default \"YES\" is never relied on."
+    },
+    {
+      "section": "survey_consent",
+      "target": "enumerator",
+      "aliases": [
+        "enumerator",
+        "coordinate_source"
+      ],
+      "source": "enumerator_id",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": "CCT_DATABRIDGE",
+      "classification": "DIRECT",
+      "notes": "coordinate_source is deliberately NOT sent: NSR would read it (\"NSR field enumeration\") as the enumerator name. If enumerator_id is absent, NSR records \"CCT_DATABRIDGE\"."
+    },
+    {
+      "section": "survey_consent",
+      "target": "unlisted_enum",
+      "aliases": [
+        "unlisted_enum"
+      ],
+      "source": null,
+      "transform": "none",
+      "type": "string",
+      "spec_default": null,
+      "classification": "MISSING",
+      "notes": "The build sheet merges enumerator and unlisted enumerator into enumerator_id."
+    },
+    {
+      "section": "survey_consent",
+      "target": "community",
+      "aliases": [
+        "community",
+        "ward"
+      ],
+      "source": "community",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": "Community",
+      "classification": "DIRECT",
+      "notes": "Mandatory in DataBridge, so the NSR default is not reached."
+    },
+    {
+      "section": "survey_consent",
+      "target": "individual_sn",
+      "aliases": [
+        "individual_sn",
+        "nsr_household_serial",
+        "internal_record_id"
+      ],
+      "source": "nsr_household_serial",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "ALIAS",
+      "notes": ""
+    },
+    {
+      "section": "survey_consent",
+      "target": "hhaddress",
+      "aliases": [
+        "hhaddress",
+        "household_address"
+      ],
+      "source": "household_address",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "ALIAS",
+      "notes": ""
+    },
+    {
+      "section": "survey_consent",
+      "target": "gps",
+      "aliases": [
+        "gps",
+        "latitude",
+        "longitude",
+        "accuracy_m"
+      ],
+      "source": "latitude",
+      "transform": "gps_components",
+      "type": "number",
+      "spec_default": "0.0 0.0 0.0 0.0",
+      "classification": "ALIAS",
+      "notes": "Sent as latitude, longitude, accuracy_m for NSR to format. DataBridge has no altitude, so it does not build the \"lat lon alt acc\" string itself. If coordinates are absent, NSR records \"0.0 0.0 0.0 0.0\" (a real point at sea): confirm NSR can leave it empty.",
+      "send_as": [
+        "latitude",
+        "longitude",
+        "accuracy_m"
+      ]
+    },
+    {
+      "section": "composition_and_headship",
+      "target": "total_heads",
+      "aliases": [
+        "total_heads",
+        "member_count"
+      ],
+      "source": "member_count",
+      "transform": "copy",
+      "type": "integer",
+      "spec_default": 1,
+      "classification": "ALIAS",
+      "notes": "Must equal the number of member records grouped under the household, or the household is blocked."
+    },
+    {
+      "section": "composition_and_headship",
+      "target": "disroster",
+      "aliases": [
+        "disroster"
+      ],
+      "source": null,
+      "transform": "none",
+      "type": "string",
+      "spec_default": "YES",
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Meaning not documented and no build-sheet field. Not sent, so NSR records \"YES\"."
+    },
+    {
+      "section": "dwelling_and_services",
+      "target": "roof_dwelling",
+      "aliases": [
+        "roof_dwelling",
+        "roof_material"
+      ],
+      "source": "roof_material",
+      "transform": "code",
+      "type": "string",
+      "spec_default": "1",
+      "classification": "ALIAS",
+      "notes": "Build-sheet roof code; the spec default \"1\" suggests codes are accepted."
+    },
+    {
+      "section": "dwelling_and_services",
+      "target": "floor_dwelling",
+      "aliases": [
+        "floor_dwelling",
+        "floor_material"
+      ],
+      "source": "floor_material",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: CEMENT, EARTH_SAND, TILES."
+    },
+    {
+      "section": "dwelling_and_services",
+      "target": "num_room",
+      "aliases": [
+        "num_room",
+        "rooms_occupied"
+      ],
+      "source": "rooms_occupied",
+      "transform": "copy",
+      "type": "integer",
+      "spec_default": 1,
+      "classification": "ALIAS",
+      "notes": ""
+    },
+    {
+      "section": "dwelling_and_services",
+      "target": "drink_dwelling",
+      "aliases": [
+        "drink_dwelling",
+        "water_source"
+      ],
+      "source": "drinking_water_source",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: TUBEWELL_BOREHOLE, PIPED_WATER."
+    },
+    {
+      "section": "dwelling_and_services",
+      "target": "toilet_dwelling",
+      "aliases": [
+        "toilet_dwelling",
+        "sanitation_type"
+      ],
+      "source": "toilet_type",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: FLUSH_TOILET, PIT_LATRINE."
+    },
+    {
+      "section": "dwelling_and_services",
+      "target": "devicetype_dwelling",
+      "aliases": [
+        "devicetype_dwelling"
+      ],
+      "source": "toilet_device_type",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "dwelling_and_services",
+      "target": "light_dwelling",
+      "aliases": [
+        "light_dwelling",
+        "lighting_source"
+      ],
+      "source": "lighting_source",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: ELECTRICITY, SOLAR, KEROSENE."
+    },
+    {
+      "section": "dwelling_and_services",
+      "target": "cook_dwelling",
+      "aliases": [
+        "cook_dwelling",
+        "cooking_fuel"
+      ],
+      "source": "cooking_fuel",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: FIREWOOD, LPG_GAS, KEROSENE, CHARCOAL."
+    },
+    {
+      "section": "vulnerability_shocks_and_coping",
+      "target": "livelihoods",
+      "aliases": [
+        "livelihoods",
+        "primary_livelihood"
+      ],
+      "source": "main_livelihood",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: CROP_FARMING, LIVESTOCK, TRADING."
+    },
+    {
+      "section": "vulnerability_shocks_and_coping",
+      "target": "other_specify_livelihoods",
+      "aliases": [
+        "other_specify_livelihoods"
+      ],
+      "source": "main_livelihood_other",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "vulnerability_shocks_and_coping",
+      "target": "anyshocks",
+      "aliases": [
+        "anyshocks"
+      ],
+      "source": "shock_affected",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "If absent, NSR records \"NO\"."
+    },
+    {
+      "section": "vulnerability_shocks_and_coping",
+      "target": "shock_type",
+      "aliases": [
+        "shock_type"
+      ],
+      "source": "shock_types",
+      "transform": "multi_codes",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Multi-select format is not documented; sent as space-separated build-sheet codes (ODK select_multiple convention). Confirm with the NSR team."
+    },
+    {
+      "section": "vulnerability_shocks_and_coping",
+      "target": "other_specify_shock",
+      "aliases": [
+        "other_specify_shock"
+      ],
+      "source": "shock_other",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "vulnerability_shocks_and_coping",
+      "target": "shock_year",
+      "aliases": [
+        "shock_year"
+      ],
+      "source": "shock_year",
+      "transform": "code_label",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "Build-sheet code 1/2/3 sent as the year it stands for (2023/2024/2025)."
+    },
+    {
+      "section": "vulnerability_shocks_and_coping",
+      "target": "mechanism_type",
+      "aliases": [
+        "mechanism_type"
+      ],
+      "source": "coping_mechanisms",
+      "transform": "multi_codes",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Multi-select format is not documented; sent as space-separated build-sheet codes (ODK select_multiple convention). Confirm with the NSR team."
+    },
+    {
+      "section": "vulnerability_shocks_and_coping",
+      "target": "other_specify_mechanism",
+      "aliases": [
+        "other_specify_mechanism"
+      ],
+      "source": "coping_other",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "vulnerability_shocks_and_coping",
+      "target": "mechanism_year",
+      "aliases": [
+        "mechanism_year"
+      ],
+      "source": "coping_year",
+      "transform": "code_label",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "Build-sheet code 1/2/3 sent as the year it stands for."
+    },
+    {
+      "section": "household_health_insurance",
+      "target": "health_insurance",
+      "aliases": [
+        "health_insurance"
+      ],
+      "source": "health_insurance_covered",
+      "transform": "code_map",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "Code 2 (\"Don't know\") has no NSR value and is not sent, so NSR records \"NO\": confirm whether NSR accepts an unknown value.",
+      "values": {
+        "0": "NO",
+        "1": "YES"
+      }
+    },
+    {
+      "section": "household_health_insurance",
+      "target": "health_insurance_type",
+      "aliases": [
+        "health_insurance_type"
+      ],
+      "source": "health_insurance_type",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_health_insurance",
+      "target": "otherhealth_insurance_type",
+      "aliases": [
+        "otherhealth_insurance_type"
+      ],
+      "source": "health_insurance_other",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "hh_items_list",
+      "aliases": [
+        "hh_items_list"
+      ],
+      "source": "asset_*",
+      "transform": "assets_any",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if any asset count is above 0; \"NO\" only if all 33 asset counts are present and 0; otherwise not sent."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "radio",
+      "aliases": [
+        "radio"
+      ],
+      "source": "asset_radio",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "radio_num",
+      "aliases": [
+        "radio_num"
+      ],
+      "source": "asset_radio",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "television",
+      "aliases": [
+        "television"
+      ],
+      "source": "asset_television",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "television_num",
+      "aliases": [
+        "television_num"
+      ],
+      "source": "asset_television",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "generator",
+      "aliases": [
+        "generator"
+      ],
+      "source": "asset_generator",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "generator_num",
+      "aliases": [
+        "generator_num"
+      ],
+      "source": "asset_generator",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "mobilephone",
+      "aliases": [
+        "mobilephone"
+      ],
+      "source": "asset_mobilephone",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "mobilephone_num",
+      "aliases": [
+        "mobilephone_num"
+      ],
+      "source": "asset_mobilephone",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "touchlight",
+      "aliases": [
+        "touchlight"
+      ],
+      "source": "asset_touchlight",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "touchlight_num",
+      "aliases": [
+        "touchlight_num"
+      ],
+      "source": "asset_touchlight",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "kerosenestove",
+      "aliases": [
+        "kerosenestove"
+      ],
+      "source": "asset_kerosenestove",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "kerosenestove_num",
+      "aliases": [
+        "kerosenestove_num"
+      ],
+      "source": "asset_kerosenestove",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "landphone",
+      "aliases": [
+        "landphone"
+      ],
+      "source": "asset_landphone",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "landphone_num",
+      "aliases": [
+        "landphone_num"
+      ],
+      "source": "asset_landphone",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "housecurrent",
+      "aliases": [
+        "housecurrent"
+      ],
+      "source": "asset_housecurrent",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "housecurrent_num",
+      "aliases": [
+        "housecurrent_num"
+      ],
+      "source": "asset_housecurrent",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "houseelsewhere",
+      "aliases": [
+        "houseelsewhere"
+      ],
+      "source": "asset_houseelsewhere",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "houseelsewhere_num",
+      "aliases": [
+        "houseelsewhere_num"
+      ],
+      "source": "asset_houseelsewhere",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "landforhousing",
+      "aliases": [
+        "landforhousing"
+      ],
+      "source": "asset_landforhousing",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "landforhousing_num",
+      "aliases": [
+        "landforhousing_num"
+      ],
+      "source": "asset_landforhousing",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "farmland",
+      "aliases": [
+        "farmland"
+      ],
+      "source": "asset_farmland",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "farmland_num",
+      "aliases": [
+        "farmland_num"
+      ],
+      "source": "asset_farmland",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "bird",
+      "aliases": [
+        "bird"
+      ],
+      "source": "asset_bird",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "birdn",
+      "aliases": [
+        "birdn"
+      ],
+      "source": "asset_bird",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "goat",
+      "aliases": [
+        "goat"
+      ],
+      "source": "asset_goat",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "goatn",
+      "aliases": [
+        "goatn"
+      ],
+      "source": "asset_goat",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "cattle",
+      "aliases": [
+        "cattle"
+      ],
+      "source": "asset_cattle",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "cattlen",
+      "aliases": [
+        "cattlen"
+      ],
+      "source": "asset_cattle",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "bicycle",
+      "aliases": [
+        "bicycle"
+      ],
+      "source": "asset_bicycle",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "bicycle_num",
+      "aliases": [
+        "bicycle_num"
+      ],
+      "source": "asset_bicycle",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "motocycle",
+      "aliases": [
+        "motocycle"
+      ],
+      "source": "asset_motocycle",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "motocycle_num",
+      "aliases": [
+        "motocycle_num"
+      ],
+      "source": "asset_motocycle",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "car",
+      "aliases": [
+        "car"
+      ],
+      "source": "asset_car",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "car_num",
+      "aliases": [
+        "car_num"
+      ],
+      "source": "asset_car",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "canoe",
+      "aliases": [
+        "canoe"
+      ],
+      "source": "asset_canoe",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "canoe_num",
+      "aliases": [
+        "canoe_num"
+      ],
+      "source": "asset_canoe",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "boat",
+      "aliases": [
+        "boat"
+      ],
+      "source": "asset_boat",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "boat_num",
+      "aliases": [
+        "boat_num"
+      ],
+      "source": "asset_boat",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "video_dvd",
+      "aliases": [
+        "video_dvd"
+      ],
+      "source": "asset_video_dvd",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "video_dvdn",
+      "aliases": [
+        "video_dvdn"
+      ],
+      "source": "asset_video_dvd",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "iron_electric",
+      "aliases": [
+        "iron_electric"
+      ],
+      "source": "asset_iron_electric",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "iron_electricn",
+      "aliases": [
+        "iron_electricn"
+      ],
+      "source": "asset_iron_electric",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "iron_charcoal",
+      "aliases": [
+        "iron_charcoal"
+      ],
+      "source": "asset_iron_charcoal",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "iron_charcoaln",
+      "aliases": [
+        "iron_charcoaln"
+      ],
+      "source": "asset_iron_charcoal",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "fan",
+      "aliases": [
+        "fan"
+      ],
+      "source": "asset_fan",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "fan_num",
+      "aliases": [
+        "fan_num"
+      ],
+      "source": "asset_fan",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "air_conditioner",
+      "aliases": [
+        "air_conditioner"
+      ],
+      "source": "asset_air_conditioner",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "air_conditionern",
+      "aliases": [
+        "air_conditionern"
+      ],
+      "source": "asset_air_conditioner",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "refrigerator",
+      "aliases": [
+        "refrigerator"
+      ],
+      "source": "asset_refrigerator",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "refrigerator_num",
+      "aliases": [
+        "refrigerator_num"
+      ],
+      "source": "asset_refrigerator",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "freezer",
+      "aliases": [
+        "freezer"
+      ],
+      "source": "asset_freezer",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "freezer_num",
+      "aliases": [
+        "freezer_num"
+      ],
+      "source": "asset_freezer",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "furniture_sofa",
+      "aliases": [
+        "furniture_sofa"
+      ],
+      "source": "asset_furniture_sofa",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "furniture_sofan",
+      "aliases": [
+        "furniture_sofan"
+      ],
+      "source": "asset_furniture_sofa",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "furniture_table",
+      "aliases": [
+        "furniture_table"
+      ],
+      "source": "asset_furniture_table",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "furniture_tablen",
+      "aliases": [
+        "furniture_tablen"
+      ],
+      "source": "asset_furniture_table",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "hifi",
+      "aliases": [
+        "hifi"
+      ],
+      "source": "asset_hifi",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "hifi_num",
+      "aliases": [
+        "hifi_num"
+      ],
+      "source": "asset_hifi",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "mattress",
+      "aliases": [
+        "mattress"
+      ],
+      "source": "asset_mattress",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "mattress_num",
+      "aliases": [
+        "mattress_num"
+      ],
+      "source": "asset_mattress",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "bed",
+      "aliases": [
+        "bed"
+      ],
+      "source": "asset_bed",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "bed_num",
+      "aliases": [
+        "bed_num"
+      ],
+      "source": "asset_bed",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "computer",
+      "aliases": [
+        "computer"
+      ],
+      "source": "asset_computer",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "computer_num",
+      "aliases": [
+        "computer_num"
+      ],
+      "source": "asset_computer",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "wash_machine",
+      "aliases": [
+        "wash_machine"
+      ],
+      "source": "asset_wash_machine",
+      "transform": "count_flag",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if the count is above 0, \"NO\" if it is 0."
+    },
+    {
+      "section": "household_assets_inventory",
+      "target": "wash_machinen",
+      "aliases": [
+        "wash_machinen"
+      ],
+      "source": "asset_wash_machine",
+      "transform": "count_num",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "The count, as a string (as in the spec examples)."
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "hh_crops_options",
+      "aliases": [
+        "hh_crops_options"
+      ],
+      "source": "crops_grown",
+      "transform": "crops_any",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "DERIVED",
+      "notes": "\"YES\" when crops_grown or crops_other_specify is present. If neither is present nothing is sent, and NSR records \"NO\" for every crop."
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Beans (Cowpea)",
+      "aliases": [
+        "Beans (Cowpea)",
+        "crop_beans"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 1, \"NO\" if crops_grown is present without it.",
+      "crop_code": "1"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Cashew",
+      "aliases": [
+        "Cashew",
+        "crop_cashew"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 2, \"NO\" if crops_grown is present without it.",
+      "crop_code": "2"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Cassava",
+      "aliases": [
+        "Cassava",
+        "crop_cassava"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 3, \"NO\" if crops_grown is present without it.",
+      "crop_code": "3"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Cocoa",
+      "aliases": [
+        "Cocoa",
+        "crop_cocoa"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 4, \"NO\" if crops_grown is present without it.",
+      "crop_code": "4"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Cocoyam",
+      "aliases": [
+        "Cocoyam",
+        "crop_cocoyam"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 5, \"NO\" if crops_grown is present without it.",
+      "crop_code": "5"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Cottons",
+      "aliases": [
+        "Cottons",
+        "crop_cottons"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 6, \"NO\" if crops_grown is present without it.",
+      "crop_code": "6"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Groundnut",
+      "aliases": [
+        "Groundnut",
+        "crop_groundnut"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 7, \"NO\" if crops_grown is present without it.",
+      "crop_code": "7"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Guinea corn",
+      "aliases": [
+        "Guinea corn",
+        "crop_guinea_corn"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 8, \"NO\" if crops_grown is present without it.",
+      "crop_code": "8"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Kolanut",
+      "aliases": [
+        "Kolanut",
+        "crop_kolanut"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 9, \"NO\" if crops_grown is present without it.",
+      "crop_code": "9"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Maize (Corn)",
+      "aliases": [
+        "Maize (Corn)",
+        "crop_maize"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 10, \"NO\" if crops_grown is present without it.",
+      "crop_code": "10"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Millet",
+      "aliases": [
+        "Millet",
+        "crop_millet"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 11, \"NO\" if crops_grown is present without it.",
+      "crop_code": "11"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Oil Palm",
+      "aliases": [
+        "Oil Palm",
+        "crop_oil_palm"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 12, \"NO\" if crops_grown is present without it.",
+      "crop_code": "12"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Potatoes",
+      "aliases": [
+        "Potatoes",
+        "crop_potatoes"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 13, \"NO\" if crops_grown is present without it.",
+      "crop_code": "13"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Rice",
+      "aliases": [
+        "Rice",
+        "crop_rice"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 14, \"NO\" if crops_grown is present without it.",
+      "crop_code": "14"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Rubber",
+      "aliases": [
+        "Rubber",
+        "crop_rubber"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 15, \"NO\" if crops_grown is present without it.",
+      "crop_code": "15"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Sesame (Beniseed)",
+      "aliases": [
+        "Sesame (Beniseed)",
+        "crop_sesame"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 16, \"NO\" if crops_grown is present without it.",
+      "crop_code": "16"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Soybeans",
+      "aliases": [
+        "Soybeans",
+        "crop_soybeans"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 17, \"NO\" if crops_grown is present without it.",
+      "crop_code": "17"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Sugarcane",
+      "aliases": [
+        "Sugarcane",
+        "crop_sugarcane"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 18, \"NO\" if crops_grown is present without it.",
+      "crop_code": "18"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Tobacco",
+      "aliases": [
+        "Tobacco",
+        "crop_tobacco"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 19, \"NO\" if crops_grown is present without it.",
+      "crop_code": "19"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "Yam",
+      "aliases": [
+        "Yam",
+        "crop_yam"
+      ],
+      "source": "crops_grown",
+      "transform": "crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "TRANSFORMED",
+      "notes": "\"YES\" if crops_grown contains code 20, \"NO\" if crops_grown is present without it.",
+      "crop_code": "20"
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "other_crop",
+      "aliases": [
+        "other_crop"
+      ],
+      "source": "crops_other_specify",
+      "transform": "other_crop_flag",
+      "type": "string",
+      "spec_default": "NO",
+      "classification": "DERIVED",
+      "notes": "\"YES\" if crops_other_specify is present; \"NO\" if crops_grown is present and crops_other_specify is not."
+    },
+    {
+      "section": "household_crops_grown",
+      "target": "other_crop_specify",
+      "aliases": [
+        "other_crop_specify"
+      ],
+      "source": "crops_other_specify",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    }
+  ],
+  "members": [
+    {
+      "section": "household_members",
+      "target": "surname",
+      "aliases": [
+        "surname",
+        "family_name"
+      ],
+      "source": "family_name",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "ALIAS",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "firstname",
+      "aliases": [
+        "firstname",
+        "given_name"
+      ],
+      "source": "given_name",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "ALIAS",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "othername",
+      "aliases": [
+        "othername",
+        "middle_name"
+      ],
+      "source": "additional_name",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "relationship",
+      "aliases": [
+        "relationship",
+        "relationship_to_head"
+      ],
+      "source": "relationship_to_head",
+      "transform": "code_map",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "The spec lists HEAD, SPOUSE, CHILD, OTHER. Build-sheet codes 4-11 (grandchild, parent, in-law, niece/nephew, foster child, house help, non-relative, other) are sent as OTHER, which loses detail: confirm whether NSR accepts finer values.",
+      "values": {
+        "1": "HEAD",
+        "2": "SPOUSE",
+        "3": "CHILD"
+      },
+      "fallback": "OTHER"
+    },
+    {
+      "section": "household_members",
+      "target": "sex",
+      "aliases": [
+        "sex",
+        "gender"
+      ],
+      "source": "gender",
+      "transform": "code_map",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "Build-sheet female code is \"0\", but the spec reads \"2\" as female, so codes are never sent raw.",
+      "values": {
+        "0": "FEMALE",
+        "1": "MALE"
+      }
+    },
+    {
+      "section": "household_members",
+      "target": "year",
+      "aliases": [
+        "year"
+      ],
+      "source": "birth_date",
+      "transform": "birth_year",
+      "type": "integer",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "month",
+      "aliases": [
+        "month"
+      ],
+      "source": "birth_date",
+      "transform": "birth_month",
+      "type": "integer",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "day",
+      "aliases": [
+        "day"
+      ],
+      "source": "birth_date",
+      "transform": "birth_day",
+      "type": "integer",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "If birth_date_estimated is true the day and month are estimates; NSR has no field for that flag."
+    },
+    {
+      "section": "household_members",
+      "target": "age",
+      "aliases": [
+        "age"
+      ],
+      "source": "birth_date",
+      "transform": "age",
+      "type": "integer",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "Completed years at the message timestamp (UTC)."
+    },
+    {
+      "section": "household_members",
+      "target": "maritalstatus",
+      "aliases": [
+        "maritalstatus",
+        "marital_status"
+      ],
+      "source": "marital_status",
+      "transform": "code_map",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "",
+      "values": {
+        "1": "MARRIED",
+        "2": "SEPARATED",
+        "3": "DIVORCED",
+        "4": "WIDOWED",
+        "5": "NEVER_MARRIED"
+      }
+    },
+    {
+      "section": "household_members",
+      "target": "birthcertificate",
+      "aliases": [
+        "birthcertificate"
+      ],
+      "source": "birth_certificate",
+      "transform": "code_map",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "\"Yes, seen\" and \"Yes, not seen\" both become YES.",
+      "values": {
+        "1": "YES",
+        "2": "YES",
+        "3": "NO"
+      }
+    },
+    {
+      "section": "household_members",
+      "target": "validnin",
+      "aliases": [
+        "validnin",
+        "has_valid_nin"
+      ],
+      "source": "has_valid_nin",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "validnintype",
+      "aliases": [
+        "validnintype",
+        "nin_type"
+      ],
+      "source": "nin_type",
+      "transform": "code_map",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "",
+      "values": {
+        "1": "NIN",
+        "2": "TRACKING_NUMBER"
+      }
+    },
+    {
+      "section": "household_members",
+      "target": "nin",
+      "aliases": [
+        "nin"
+      ],
+      "source": "nin",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "connin",
+      "aliases": [
+        "connin"
+      ],
+      "source": null,
+      "transform": "none",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Confirmation (re-entry) field on the paper/ODK form. DataBridge holds one value only and does not copy it into the confirmation field. Confirm with the NSR team whether it is required."
+    },
+    {
+      "section": "household_members",
+      "target": "ninsurname",
+      "aliases": [
+        "ninsurname"
+      ],
+      "source": "nin_surname",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "ninfirstname",
+      "aliases": [
+        "ninfirstname"
+      ],
+      "source": "nin_firstname",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "ninothername",
+      "aliases": [
+        "ninothername"
+      ],
+      "source": "nin_othername",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "trackid",
+      "aliases": [
+        "trackid"
+      ],
+      "source": "nin_tracking_number",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "contrackid",
+      "aliases": [
+        "contrackid"
+      ],
+      "source": null,
+      "transform": "none",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Confirmation (re-entry) field on the paper/ODK form. DataBridge holds one value only and does not copy it into the confirmation field. Confirm with the NSR team whether it is required."
+    },
+    {
+      "section": "household_members",
+      "target": "contactno",
+      "aliases": [
+        "contactno",
+        "phone_number"
+      ],
+      "source": "phone_number",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "ALIAS",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "confrim_contactno",
+      "aliases": [
+        "confrim_contactno"
+      ],
+      "source": null,
+      "transform": "none",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Confirmation (re-entry) field on the paper/ODK form. DataBridge holds one value only and does not copy it into the confirmation field. Confirm with the NSR team whether it is required. The key is spelled \"confrim\" in the spec."
+    },
+    {
+      "section": "household_members",
+      "target": "bank_name",
+      "aliases": [
+        "bank_name"
+      ],
+      "source": "bank_name",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec example: ACCESS_BANK."
+    },
+    {
+      "section": "household_members",
+      "target": "other_bank_name",
+      "aliases": [
+        "other_bank_name"
+      ],
+      "source": "bank_name_other",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "accountname",
+      "aliases": [
+        "accountname",
+        "account_name"
+      ],
+      "source": "account_name",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "ALIAS",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "accountno",
+      "aliases": [
+        "accountno",
+        "account_number"
+      ],
+      "source": "account_number",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "ALIAS",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "caccountno",
+      "aliases": [
+        "caccountno"
+      ],
+      "source": null,
+      "transform": "none",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Confirmation (re-entry) field on the paper/ODK form. DataBridge holds one value only and does not copy it into the confirmation field. Confirm with the NSR team whether it is required."
+    },
+    {
+      "section": "household_members",
+      "target": "bvn",
+      "aliases": [
+        "bvn"
+      ],
+      "source": "bvn",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "cbvn",
+      "aliases": [
+        "cbvn"
+      ],
+      "source": null,
+      "transform": "none",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Confirmation (re-entry) field on the paper/ODK form. DataBridge holds one value only and does not copy it into the confirmation field. Confirm with the NSR team whether it is required."
+    },
+    {
+      "section": "household_members",
+      "target": "b5labour",
+      "aliases": [
+        "b5labour"
+      ],
+      "source": "employment_status",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "b6labour",
+      "aliases": [
+        "b6labour"
+      ],
+      "source": "work_sector",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "agriculture",
+      "aliases": [
+        "agriculture"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 1.",
+      "sector_code": "1"
+    },
+    {
+      "section": "household_members",
+      "target": "mining",
+      "aliases": [
+        "mining"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 2.",
+      "sector_code": "2"
+    },
+    {
+      "section": "household_members",
+      "target": "manufacturing",
+      "aliases": [
+        "manufacturing"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 3.",
+      "sector_code": "3"
+    },
+    {
+      "section": "household_members",
+      "target": "electricity",
+      "aliases": [
+        "electricity"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 4.",
+      "sector_code": "4"
+    },
+    {
+      "section": "household_members",
+      "target": "water",
+      "aliases": [
+        "water"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 5.",
+      "sector_code": "5"
+    },
+    {
+      "section": "household_members",
+      "target": "construction",
+      "aliases": [
+        "construction"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 6.",
+      "sector_code": "6"
+    },
+    {
+      "section": "household_members",
+      "target": "wholesale",
+      "aliases": [
+        "wholesale"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 7.",
+      "sector_code": "7"
+    },
+    {
+      "section": "household_members",
+      "target": "transportation",
+      "aliases": [
+        "transportation"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 8.",
+      "sector_code": "8"
+    },
+    {
+      "section": "household_members",
+      "target": "accommodation",
+      "aliases": [
+        "accommodation"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 9.",
+      "sector_code": "9"
+    },
+    {
+      "section": "household_members",
+      "target": "information",
+      "aliases": [
+        "information"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 10.",
+      "sector_code": "10"
+    },
+    {
+      "section": "household_members",
+      "target": "financial",
+      "aliases": [
+        "financial"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 11.",
+      "sector_code": "11"
+    },
+    {
+      "section": "household_members",
+      "target": "real",
+      "aliases": [
+        "real"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 12.",
+      "sector_code": "12"
+    },
+    {
+      "section": "household_members",
+      "target": "professional",
+      "aliases": [
+        "professional"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 13.",
+      "sector_code": "13"
+    },
+    {
+      "section": "household_members",
+      "target": "administrative",
+      "aliases": [
+        "administrative"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 14.",
+      "sector_code": "14"
+    },
+    {
+      "section": "household_members",
+      "target": "public",
+      "aliases": [
+        "public"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 15.",
+      "sector_code": "15"
+    },
+    {
+      "section": "household_members",
+      "target": "education",
+      "aliases": [
+        "education"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 16.",
+      "sector_code": "16"
+    },
+    {
+      "section": "household_members",
+      "target": "human",
+      "aliases": [
+        "human"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 17.",
+      "sector_code": "17"
+    },
+    {
+      "section": "household_members",
+      "target": "arts",
+      "aliases": [
+        "arts"
+      ],
+      "source": "work_subsector",
+      "transform": "subsector",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": "work_subsector code, sent under this key only when work_sector = 18.",
+      "sector_code": "18"
+    },
+    {
+      "section": "household_members",
+      "target": "b6_other",
+      "aliases": [
+        "b6_other"
+      ],
+      "source": "work_other_specify",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": "Sector 19 (\"Other service activities\") has no subsector key in the spec; its subsector code is not sent."
+    },
+    {
+      "section": "household_members",
+      "target": "educationalqualification",
+      "aliases": [
+        "educationalqualification"
+      ],
+      "source": "educational_qualification",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec example: SECONDARY."
+    },
+    {
+      "section": "household_members",
+      "target": "currentlyenrolledinschl",
+      "aliases": [
+        "currentlyenrolledinschl"
+      ],
+      "source": "currently_enrolled",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "grade",
+      "aliases": [
+        "grade"
+      ],
+      "source": "current_grade",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "outofschoolgrade",
+      "aliases": [
+        "outofschoolgrade"
+      ],
+      "source": "last_grade_completed",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "monthstopschool",
+      "aliases": [
+        "monthstopschool"
+      ],
+      "source": "month_left_school",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "yearstopschool",
+      "aliases": [
+        "yearstopschool"
+      ],
+      "source": "year_left_school",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "howfarisschoolenrolled",
+      "aliases": [
+        "howfarisschoolenrolled"
+      ],
+      "source": "school_travel_time",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "pregnant",
+      "aliases": [
+        "pregnant"
+      ],
+      "source": "pregnant",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "lactating",
+      "aliases": [
+        "lactating"
+      ],
+      "source": "lactating",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "benefitfromhealthcare",
+      "aliases": [
+        "benefitfromhealthcare"
+      ],
+      "source": "uses_health_facility",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "howfarishealthcentre",
+      "aliases": [
+        "howfarishealthcentre"
+      ],
+      "source": "health_centre_travel_time",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "muac",
+      "aliases": [
+        "muac"
+      ],
+      "source": "muac",
+      "transform": "copy",
+      "type": "number",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "food_nutrition",
+      "aliases": [
+        "food_nutrition"
+      ],
+      "source": "nutrition_programmes",
+      "transform": "multi_codes",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Multi-select format is not documented; sent as space-separated build-sheet codes (ODK select_multiple convention). Confirm with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "disability",
+      "aliases": [
+        "disability"
+      ],
+      "source": "has_severe_disability",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "health_problem_label",
+      "aliases": [
+        "health_problem_label"
+      ],
+      "source": null,
+      "transform": "none",
+      "type": "string",
+      "spec_default": null,
+      "classification": "MISSING",
+      "notes": "No build-sheet field. Possibly a form label rather than data: confirm."
+    },
+    {
+      "section": "household_members",
+      "target": "seeing",
+      "aliases": [
+        "seeing"
+      ],
+      "source": "difficulty_seeing",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "hearing",
+      "aliases": [
+        "hearing"
+      ],
+      "source": "difficulty_hearing",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "walking",
+      "aliases": [
+        "walking"
+      ],
+      "source": "difficulty_walking",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "remembering",
+      "aliases": [
+        "remembering"
+      ],
+      "source": "difficulty_remembering",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "selfcare",
+      "aliases": [
+        "selfcare"
+      ],
+      "source": "difficulty_self_care",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "communication",
+      "aliases": [
+        "communication"
+      ],
+      "source": "difficulty_communicating",
+      "transform": "code",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "chronicallyill",
+      "aliases": [
+        "chronicallyill"
+      ],
+      "source": "chronically_ill",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "chronicallyilltype",
+      "aliases": [
+        "chronicallyilltype"
+      ],
+      "source": "chronic_illness_types",
+      "transform": "multi_codes",
+      "type": "string",
+      "spec_default": null,
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Multi-select format is not documented; sent as space-separated build-sheet codes (ODK select_multiple convention). Confirm with the NSR team."
+    },
+    {
+      "section": "household_members",
+      "target": "otherchronicallyilltype",
+      "aliases": [
+        "otherchronicallyilltype"
+      ],
+      "source": "chronic_illness_other",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "socialnetwork_label",
+      "aliases": [
+        "socialnetwork_label"
+      ],
+      "source": "member_*",
+      "transform": "social_any",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DERIVED",
+      "notes": "\"YES\" if any of the five group memberships is true; \"NO\" only if all five are present and false; otherwise not sent."
+    },
+    {
+      "section": "household_members",
+      "target": "cooperative",
+      "aliases": [
+        "cooperative"
+      ],
+      "source": "member_cooperative",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "religiousgroup",
+      "aliases": [
+        "religiousgroup"
+      ],
+      "source": "member_religious_group",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "businessgroup",
+      "aliases": [
+        "businessgroup"
+      ],
+      "source": "member_business_group",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "agegroup",
+      "aliases": [
+        "agegroup"
+      ],
+      "source": "member_age_group",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "other_social_group",
+      "aliases": [
+        "other_social_group"
+      ],
+      "source": "member_other_group",
+      "transform": "yes_no",
+      "type": "string",
+      "spec_default": null,
+      "classification": "TRANSFORMED",
+      "notes": ""
+    },
+    {
+      "section": "household_members",
+      "target": "othergroup",
+      "aliases": [
+        "othergroup"
+      ],
+      "source": "other_group_specify",
+      "transform": "copy",
+      "type": "string",
+      "spec_default": null,
+      "classification": "DIRECT",
+      "notes": ""
+    }
+  ],
+  "not_sent": {
+    "record_status": "DataBridge lifecycle field.",
+    "country_code": "Always NG; no NSR field.",
+    "data_source": "DataBridge lineage field.",
+    "synthetic": "No NSR field. NSR cannot tell test data from real data: see the open questions.",
+    "household_name": "Derived display name; NSR builds its own.",
+    "zone_id": "No NSR field.",
+    "zone_name": "No NSR field.",
+    "state_id": "No NSR field (state_name is sent).",
+    "lga_id": "No NSR field (lga_name is sent).",
+    "rural_urban": "No NSR field in the specification.",
+    "coordinate_source": "Deliberately not sent: the spec lists it as an alias for enumerator.",
+    "coordinate_verified": "No NSR field.",
+    "administrative_level": "No NSR field.",
+    "code_system": "No NSR field.",
+    "geo_lowest_level_value_id": "No NSR field.",
+    "geo_code_hierarchy_json": "No NSR field.",
+    "monthly_income": "No NSR field in the specification.",
+    "birth_date_estimated": "No NSR field; see the \"day\" mapping.",
+    "email": "No NSR field in the specification.",
+    "nsr_number": "No NSR field in the specification.",
+    "is_household_head": "Used to find the head; NSR receives the relationship instead."
+  }
+}

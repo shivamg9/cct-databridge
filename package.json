@@ -1,6 +1,6 @@
 {
   "name": "cct-databridge",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "CCT DataBridge: OpenG2P push/pull API and operator console prototype",
   "engines": { "node": ">=18" },

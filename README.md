@@ -42,10 +42,10 @@ Rebuild the generated files after changing the build sheet or any diagram:
 
 ```bash
 python -I scripts/build.py ../NSR_Registry_Build_Sheet.xlsx   # needs openpyxl
-node --test                                                  # 26 engine + 11 terminology + 18 API + 8 UI tests, Node 18+
+node --test                                                  # 26 engine + 11 terminology + 21 API + 28 NSR + 9 UI tests, Node 18+
 ```
 
-`node --test` with no argument finds `tests/*.test.js` on Node 18–22. Avoid `node --test tests/`: from Node 21 it treats `tests/` as a file and fails. The 8 UI tests need jsdom and are reported as skipped without it.
+`node --test` with no argument finds `tests/*.test.js` on Node 18–22. Avoid `node --test tests/`: from Node 21 it treats `tests/` as a file and fails. The 9 UI tests need jsdom and are reported as skipped without it.
 
 ## Run with Docker Desktop (local demo)
 
@@ -138,6 +138,51 @@ Four safety rules apply:
 
 See [docs/api/openg2p-handoff.md](docs/api/openg2p-handoff.md) (the short handoff) and [docs/api/openg2p-integration.md](docs/api/openg2p-integration.md) (the full reference, network access and storage limits).
 
+## Sending households to the OpenG2P NSR (outbound webhook)
+
+DataBridge can send households to the NSR Household Register through `POST /partner/ingest_data` (spec: [docs/architecture/CCT_DataBridge_NSR_Webhook_Specification.md](docs/architecture/CCT_DataBridge_NSR_Webhook_Specification.md)). It groups member records by `nsr_household_serial`, checks the household (consent, head, member count, duplicates, conflicting values), maps it to the NSR form fields, and only sends after an operator previews it and confirms.
+
+- **Off by default** (`NSR_WEBHOOK_ENABLED=false`): preview works, nothing is sent. The base `docker-compose.yml` fixes it off; `docker-compose.nsr-mock.yml` turns it on against a local mock only.
+- **API**: `/api/v1/nsr/config`, `/households`, `/preview`, `/submit`, `/submit/batch`, `/deliveries[/{id}[/retry|/reconcile]]`. Submitting needs a separate key (`DATABRIDGE_NSR_SUBMIT_KEY`) and an `X-Operator-Id`.
+- **Console**: Transfers → Send to NSR.
+- **Never sent automatically**: not at startup, not on seed, push or pull. Uncertain outcomes are reconciled by a person, never resent blindly.
+- **Not yet tested against the real NSR.** Open questions for the NSR team (signature, authentication, commit status, code values, defaults) are listed in the integration reference.
+
+Docs: [nsr-webhook-integration.md](docs/api/nsr-webhook-integration.md) (reference and open questions), [nsr-field-mapping.md](docs/api/nsr-field-mapping.md) (all 202 NSR fields, generated from `server/integrations/nsr/mapping.json`), [nsr-delivery-operations.md](docs/operations/nsr-delivery-operations.md), [nsr-deployment-runbook.md](docs/operations/nsr-deployment-runbook.md).
+
+### Testing against the local NSR mock
+
+The mock (`scripts/nsr-mock-server.js`) stands in for NSR on `127.0.0.1:8090`. It answers `ACK` by default, records every request, and can be told to fail. Its signature value `local-mock-signature` is a placeholder for the mock only, not a secret and not used anywhere else.
+
+```bash
+# 1. Start the stack with the mock (needs DATABRIDGE_API_KEY and DATABRIDGE_NSR_SUBMIT_KEY in .env)
+docker compose -f docker-compose.yml -f docker-compose.nsr-mock.yml up --build -d
+
+# 2. Run the Postman collection (or import both files into Postman and fill in the two keys)
+npx newman run postman/CCT-DataBridge.postman_collection.json \
+  -e postman/CCT-DataBridge-Local-NSR-Mock.postman_environment.json \
+  --env-var api_key="$DATABRIDGE_API_KEY" --env-var nsr_submit_key="$DATABRIDGE_NSR_SUBMIT_KEY"
+
+# 3. See what the mock NSR received: query parameters, Content-Type and the full envelope
+curl -s http://127.0.0.1:8090/__mock/received
+
+# 4. Simulate failures: queue answers for the next requests, then submit from the console or API
+curl -s -X POST http://127.0.0.1:8090/__mock/responses -H "Content-Type: application/json" \
+  -d '[{"status":503},{"status":200}]'   # 503 -> Will retry, then ACCEPTED on the automatic retry (a few seconds with the mock settings)
+#   {"status":422,"body":{...}}  -> REJECTED          {"status":401}   -> DELIVERY_FAILED
+#   {"status":500} / {"status":504} / {"delayMs":25000} / {"destroy":true}  -> CONFIRMATION_PENDING (reconcile by hand)
+curl -s -X POST http://127.0.0.1:8090/__mock/reset       # clear received messages and queued answers
+
+# 5. Back to the plain stack, webhook off
+docker compose -f docker-compose.yml -f docker-compose.nsr-mock.yml down && docker compose up -d
+```
+
+Mock deliveries are stored apart from the normal ones (`/data/mock-nsr-deliveries.json`). The Local and Live Postman environments skip the submit requests (`nsr_submit_allowed` is empty), so running them never sends anything.
+
+**A successful mock delivery does not prove that the real NSR registry accepted or committed the data.** It proves the request DataBridge builds (URL, query parameters, envelope, grouping, mapping) and DataBridge's own handling of each response. Even against the real NSR, an `ACK` only means NSR received the message (`registry_commit: NOT_CONFIRMED`); the household has to be checked in the NSR Household Register.
+
+Pending before connecting to the real NSR (details in [nsr-webhook-integration.md §8](docs/api/nsr-webhook-integration.md) and the [runbook](docs/operations/nsr-deployment-runbook.md) gate checklist): the signature method and value, how the endpoint is authenticated (allowlist, gateway, mTLS), partner registration and template deployment, whether `staff-nsr` is staging or production, how to confirm a commit, how resubmissions are treated, the code vocabularies for fields marked REVIEW_REQUIRED, and whether NSR can leave absent keys empty instead of applying its defaults.
+
 `build.py` fails if the field count differs from 145 or if a field name is duplicated. It regenerates:
 
 - `prototype/schema.js`
@@ -177,6 +222,7 @@ See [docs/api/openg2p-handoff.md](docs/api/openg2p-handoff.md) (the short handof
 | RBAC (6 roles, 13 permissions), audit log, payload access with justification | **Implemented** in the engine (no real IdP) |
 | Encryption, KMS, Vault, TLS/mTLS | **Not implemented.** Designed and shown as references only |
 | OpenG2P push/pull REST API (`server/`) | **Implemented** as a local Node service with a JSON-file store; not connected to any OpenG2P deployment |
+| Outbound NSR webhook (`server/integrations/nsr/`) | **Implemented**, tested against a mock only; off by default until the NSR team confirms the open questions |
 | Backend service, database, queue | **Not built.** The engine module is the reference logic for the FastAPI + Celery service |
 
 ## Project layout
@@ -195,12 +241,16 @@ cct-databridge/
   server/
     api.js             push/pull REST API for OpenG2P (Node built-ins)
     records.js         schema-driven validation, upsert, paging, JSON-file store
+    integrations/nsr/  outbound NSR webhook: mapping.json, mapper, envelope, client, delivery store and service
   scripts/build.py     build sheet → schema/docs/templates; diagrams → index.html
   tests/engine.test.js 26 tests covering every failure path below
   tests/ui-terms.test.js 11 tests: labels for every code, status and audit action; navigation and statuses
-  tests/ui-flow.test.js 8 jsdom tests of the operator flow and admin pages (skipped if jsdom is not installed)
+  tests/ui-flow.test.js 9 jsdom tests of the operator flow, admin pages and Send to NSR (skipped if jsdom is not installed)
   tests/api.test.js    21 tests: status codes, validation, duplicates, paging, keys, modes, masking, direction, 145-field records, demo unmasked pull
+  tests/nsr.test.js    28 tests: NSR mapping vs the specification, grouping, payload, delivery outcomes, retries, persistence, security
   scripts/build-postman.js  postman/ collection and environments; field list taken from prototype/schema.js
+  scripts/build-nsr-mapping-doc.js  docs/api/nsr-field-mapping.md from mapping.json
+  scripts/nsr-mock-server.js  mock NSR /partner/ingest_data for tests and docker-compose.nsr-mock.yml
   templates/           nsr_import_template.csv, field_dictionary.csv
   docs/
     architecture/      8 Mermaid sources (A–H), the single source of truth for diagrams

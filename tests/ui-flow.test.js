@@ -166,3 +166,59 @@ test('every Settings page still renders for administrators', { skip }, () => {
   assert.equal(u.$('h1').textContent, 'Home', 'leaving an admin role leaves admin pages');
   assert.deepEqual(u.errors, []);
 });
+
+test('Send to NSR: permitted roles only; check, review and send through the API with keys kept in page memory', { skip }, async () => {
+  const u = boot();
+  const calls = [];
+  const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+  const households = [
+    { household_serial: 'HH-UI-0001', status: 'READY', members: 2, state_name: 'Oyo', lga_name: 'Ibadan North', errors: [], warnings: 3, latest_delivery: null },
+    { household_serial: 'HH-UI-0002', status: 'VALIDATION_FAILED', members: 2, state_name: 'Kano', lga_name: 'Dala', errors: ['CONSENT_NOT_GIVEN'], warnings: 0, latest_delivery: null },
+  ];
+  const delivery = { id: 'dlv-1', status: 'ACCEPTED', correlation_id: '02de528d45974727af21069c1a4ee429', attempt_count: 1, created_at: new Date().toISOString(), households: [{ household_serial: 'HH-UI-0001' }], registry_commit: 'NOT_CONFIRMED' };
+  let sent = false;
+  u.w.fetch = async (url, opts) => {
+    calls.push({ url, method: opts.method, headers: opts.headers, body: opts.body });
+    if (url.endsWith('/config')) return reply(200, { enabled: true });
+    if (url.endsWith('/households')) return reply(200, { items: households });
+    if (url.includes('/deliveries')) return reply(200, { items: sent ? [delivery] : [] });
+    if (url.endsWith('/preview')) return reply(200, { status: 'READY', view: 'masked', households: [{ household_serial: 'HH-UI-0001', status: 'READY', members: 2, errors: [], warnings: [{ code: 'NSR_DEFAULT_APPLIES', field: 'sponsor', message: 'not sent; NSR will record "FEDERAL_GOVERNMENT"' }] }], request: { method: 'POST', url: 'https://nsr.example/partner/ingest_data', format: 'single', body: { header: { sender_id: 'CCT_DATABRIDGE' }, message: { individual_sn: 'HH-UI-0001' } } } });
+    if (url.endsWith('/submit')) { sent = true; return reply(201, delivery); }
+    return reply(404, { error: { code: 'NOT_FOUND' } });
+  };
+  const type = (sel, v) => { const el = u.$(sel); el.value = v; el.dispatchEvent(new u.w.Event('input', { bubbles: true })); };
+  u.click('[data-act="nav"][data-arg="runs"]');
+  u.role('READ_ONLY');
+  assert.ok(!u.$('[data-act="tview"][data-arg="nsr"]'), 'read-only users do not see it');
+  u.role('INGESTION_OPERATOR');
+  u.click('[data-act="tview"][data-arg="nsr"]');
+  type('#nsr-key', 'standard-key-ui');
+  await u.until(() => !u.button('Connect').disabled);
+  u.click(u.button('Connect'));
+  await u.until(() => /HH-UI-0001/.test(u.text()));
+  assert.match(u.text(), /Consent to share data was not given\./, 'blocked households say why, in plain words');
+  assert.ok(u.$('[data-act="nsr-toggle"][data-arg="HH-UI-0002"]').disabled);
+  u.click('[data-act="nsr-toggle"][data-arg="HH-UI-0001"]');
+  u.click(u.button('Check Selected'));
+  await u.until(() => /2\. Review/.test(u.text()));
+  assert.ok(u.$$('details.more summary').some((s) => /Show the request NSR will receive/.test(s.textContent)), 'payload behind an expandable section');
+  assert.ok(u.$('[data-act="nsr-submit"]').disabled, 'needs the submit key, a name and the confirmation tick');
+  type('#nsr-submit-key', 'submit-key-ui');
+  type('#nsr-operator', 'operator.ui');
+  await new Promise((r) => setTimeout(r, 250));
+  const tick = u.$('#nsr-confirm'); tick.checked = true; tick.dispatchEvent(new u.w.Event('change', { bubbles: true }));
+  assert.ok(!u.$('[data-act="nsr-submit"]').disabled);
+  u.click(u.$('[data-act="nsr-submit"]'));
+  await u.until(() => /Sent\. NSR received the message\./.test(u.text()));
+  assert.match(u.text(), /02de528d45974727af21069c1a4ee429/);
+  assert.match(u.text(), /confirm in the Household Register/, 'an ACK is not presented as registry creation');
+  const submit = calls.find((c) => c.url.endsWith('/submit'));
+  assert.deepEqual([submit.headers['X-API-Key'], submit.headers['X-Operator-Id'], JSON.parse(submit.body)], ['submit-key-ui', 'operator.ui', { household_serial: 'HH-UI-0001', confirm: true }]);
+  assert.ok(calls.filter((c) => !c.url.endsWith('/submit')).every((c) => c.headers['X-API-Key'] === 'standard-key-ui'), 'reads use the standard key');
+  const stored = JSON.stringify({ ...u.w.localStorage }) + JSON.stringify({ ...u.w.sessionStorage });
+  assert.doesNotMatch(stored, /submit-key-ui|standard-key-ui/, 'keys are never stored');
+  u.role('DATA_QUALITY_ANALYST');
+  assert.ok(!u.$('[data-act="nsr-submit"]'), 'analysts can check but not send');
+  assert.ok(!u.failed());
+  assert.deepEqual(u.errors, []);
+});

@@ -6,6 +6,8 @@
 server/data/
 *.access-log.jsonl
 *.json.tmp
+*-nsr-deliveries.json*
+*.audit.jsonl
 node_modules/
 *.zip
 tests/
