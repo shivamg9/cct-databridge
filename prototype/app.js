@@ -99,8 +99,10 @@
     reconScope: '', reconOpen: null, lineQ: '', auditQ: '', sourceForm: null, modal: null, toast: null, animating: new Set(), auto: false, payloadView: null,
     // Send to NSR. Keys live in this object only (page memory), never in storage.
     nsr: { key: '', submitKey: '', operator: '', cfg: null, households: null, deliveries: null, selected: [], preview: null, result: null, confirm: false, busy: false, error: null, notes: {} },
+    // Add Records transfers not yet on the server, and the latest save. Page memory: a reload loses them.
+    unsaved: [], save: null,
   };
-  function newWizard() { return { step: 1, sourceId: '', mode: '', file: null, upload: null, headerCheck: null, sim: {}, dry: null, ack: false, testResult: null, runId: null, showIssues: false, save: null }; }
+  function newWizard() { return { step: 1, sourceId: '', mode: '', file: null, upload: null, headerCheck: null, sim: {}, dry: null, ack: false, testResult: null, runId: null, showIssues: false }; }
 
   // Settings pages are for administrators; anyone else asking for one lands on Home.
   const allowedPage = (page) => (T.SETTINGS_PAGES.includes(page) && !techAllowed() ? 'home' : page);
@@ -507,6 +509,8 @@
   }
   async function nsrLoad() {
     const n = UI.nsr;
+    // Uploads reach the server here at the latest, so leaving the transfer screen early cannot lose them.
+    for (const id of UI.unsaved.filter((x) => !UI.animating.has(x))) await saveRun(E.getRun(id));
     n.cfg = await nsrApi('GET', '/config');
     n.households = (await nsrApi('GET', '/households')).items;
     n.deliveries = (await nsrApi('GET', '/deliveries?page_size=50')).items;
@@ -515,7 +519,10 @@
   function nsrView() {
     const n = UI.nsr;
     const canSend = E.can('nsr.submit');
-    const err = n.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(n.error.code)}</b>${n.error.details && n.error.details.length ? html`<div class="small">${n.error.details.map((d) => html`<div>${d.household_serial || ''} ${d.errors ? d.errors.map((e) => nsrReason(e.code)).join(' ') : nsrReason(d.code)}</div>`)}</div>` : ''}</div>` : '';
+    const pending = UI.unsaved.reduce((t, id) => t + savable(E.getRun(id)).length, 0);
+    const queued = pending ? html`<div class="callout warn" role="status"><b>${num(pending)} uploaded records are not on the server yet.</b><div>${n.households ? 'Refresh' : 'Connect'} saves them. Reloading this page loses them.</div></div>` : '';
+    const saveState = html`${queued}${UI.save && !UI.save.busy ? saveNote({ ...UI.save, error: null }) : ''}`;
+    const err = n.error ? html`${saveState}<div class="callout crit" role="alert"><b>${nsrReason(n.error.code)}</b>${n.error.details && n.error.details.length ? html`<div class="small">${n.error.details.map((d) => html`<div>${d.household_serial || ''} ${d.errors ? d.errors.map((e) => nsrReason(e.code)).join(' ') : nsrReason(d.code)}</div>`)}</div>` : ''}</div>` : saveState;
     const connect = html`<section class="panel"><header><b>Connect</b>${n.cfg ? html`<span class="sub">${n.cfg.enabled ? 'Sending is on' : 'Sending is off: you can check households, nothing is sent'}</span>` : ''}</header><div class="body">
       <div class="filters">
         <label class="field">API key<input type="password" id="nsr-key" autocomplete="off" data-live data-bind="nsr.key" value="${n.key}"></label>
@@ -992,21 +999,24 @@
   function savePanel(run) {
     const count = savable(run).length;
     if (!count || !E.can('run.start')) return '';
-    const s = UI.wiz.save;
+    const s = UI.save && UI.save.runId === run.id ? UI.save : null;
     const saved = s && !s.busy && s.done > 0;
     return html`<section class="panel"><header><b>Save for Send to NSR</b></header><div class="body stack">
-      <p style="margin:0">${num(count)} records are ready. Save them to the server to send them to NSR.</p>
+      <p style="margin:0">${num(count)} records are ready. Save them here, or connect on Send to NSR.</p>
       <label class="field">API key<input type="password" id="wiz-api-key" autocomplete="off" data-live data-bind="nsr.key" value="${UI.nsr.key}"></label>
-      ${s && s.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(s.error)}</b></div>` : ''}
-      ${s && s.failed.length ? html`<div class="callout crit" role="alert"><b>${num(s.failed.length)} records were not saved.</b><ul class="small">${s.failed.slice(0, 20).map((f) => html`<li>${f}</li>`)}</ul></div>` : ''}
-      ${saved ? html`<div class="callout ok" role="status"><b>${num(s.done)} of ${num(s.total)} records saved.</b></div>` : ''}
+      ${s ? saveNote(s) : ''}
       <div class="btns"><button class="btn primary" data-act="wiz-save" ${raw(!UI.nsr.key || (s && s.busy) ? 'disabled' : '')}>${s && s.busy ? `Saving ${num(s.done)} of ${num(s.total)}` : 'Save to Server'}</button>
       ${saved && E.can('nsr.preview') ? html`<button class="btn" data-act="wiz-open-nsr">Open Send to NSR</button>` : ''}</div></div></section>`;
+  }
+  function saveNote(s) {
+    return html`${s.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(s.error)}</b></div>` : ''}
+      ${s.failed.length ? html`<div class="callout crit" role="alert"><b>${num(s.failed.length)} records were not saved.</b><ul class="small">${s.failed.slice(0, 20).map((f) => html`<li>${f}</li>`)}</ul></div>` : ''}
+      ${!s.busy && s.done > 0 ? html`<div class="callout ok" role="status"><b>${num(s.done)} of ${num(s.total)} records saved.</b></div>` : ''}`;
   }
   // One request per record, the API's limit. Saving again is safe: an unchanged record stays as it is.
   async function saveRun(run) {
     const records = savable(run).map((r) => DB.backendRecord(SCHEMA, r));
-    const s = UI.wiz.save = { busy: true, done: 0, total: records.length, failed: [], error: null };
+    const s = UI.save = { runId: run.id, busy: true, done: 0, total: records.length, failed: [], error: null };
     render();
     for (const rec of records) {
       let res, data;
@@ -1020,6 +1030,7 @@
       render();
     }
     s.busy = false;
+    if (!s.error && !s.failed.length) UI.unsaved = UI.unsaved.filter((id) => id !== run.id);
     render();
   }
   function simPanel() {
@@ -1513,6 +1524,7 @@
       const res = E.startRun(w.sourceId, { mode: w.mode, sim: { ...w.sim }, file: w.file ? engineFile(w.file) : null, approvedBy: S.user, dryRunRef: w.dry ? w.dry.dryRunId : null });
       if (res.blocked) { toast(`Blocked: ${srcName(w.sourceId)} is disabled.`, true); return; }
       w.runId = res.id;
+      UI.unsaved.push(res.id);
       animate(res);
     },
     scenario: (id) => startScenario(id),

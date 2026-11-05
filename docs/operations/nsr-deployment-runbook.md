@@ -174,18 +174,18 @@ curl -s "$BASE/nsr/deliveries?status=DELIVERY_FAILED" -H "X-API-Key: $KEY"
 k -n cct-databridge exec deploy/databridge-backend -- tail -n 20 /data/demo-nsr-deliveries.json.audit.jsonl
 ```
 
-## Frontend 0.7.1: Save to Server
+## Frontend 0.7.2: Save to Server
 
-Add Records runs in the browser and never reached the backend, so Send to NSR stayed empty in a deployment with no seeded records. 0.7.1 adds **Save to Server** at the end of a transfer. Only the frontend image changes.
+Add Records runs in the browser and never reached the backend, so Send to NSR stayed empty in a deployment with no seeded records. 0.7.2 saves a transfer with **Save to Server**, or on Connect or Refresh in Send to NSR. Only the frontend image changes.
 
 ```bash
-docker buildx build --platform linux/amd64 -t oorudigital/cct-databridge-frontend:0.7.1 -f docker/frontend.Dockerfile --push .
+docker buildx build --platform linux/amd64 -t shivamrg/cct-databridge-frontend:0.7.2 -f docker/frontend.Dockerfile --push .
 ```
 
 Check the backend's mode first: `curl -s https://databridge.openg2p.dpiforall.com/api/v1/health`. If it says `integration`, the server's manifests differ from `k8s/10-backend.yaml` (demo, `--seed-demo`). Do not run `k apply -k` from this repo: change only the frontend image.
 
 ```bash
-k -n cct-databridge set image deploy/databridge-frontend frontend=oorudigital/cct-databridge-frontend:0.7.1
+k -n cct-databridge set image deploy/databridge-frontend frontend=shivamrg/cct-databridge-frontend:0.7.2
 k -n cct-databridge rollout status deploy/databridge-frontend
 ```
 

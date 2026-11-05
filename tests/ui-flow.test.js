@@ -262,3 +262,44 @@ test('after a transfer, Save to Server pushes each record, then Send to NSR open
   assert.ok(!u.failed());
   assert.deepEqual(u.errors, []);
 });
+
+test('leaving a finished transfer without saving does not lose it: Connect on Send to NSR saves it first', { skip }, async () => {
+  const u = boot();
+  const order = [];
+  const pushed = [];
+  const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+  u.w.fetch = async (url, opts) => {
+    order.push(url);
+    if (url === '/api/v1/records') { pushed.push(JSON.parse(opts.body)); return reply(201, { status: 'CREATED' }); }
+    if (url.endsWith('/config')) return reply(200, { enabled: true });
+    if (url.endsWith('/households')) return reply(200, { items: [{ household_serial: pushed[0].nsr_household_serial, status: 'READY', members: 1, errors: [], warnings: 0, latest_delivery: null }] });
+    return reply(200, { items: [] });
+  };
+  const type = (sel, v) => { const el = u.$(sel); el.value = v; el.dispatchEvent(new u.w.Event('input', { bubbles: true })); };
+  u.click('[data-act="nav"][data-arg="ingest"]');
+  u.click('[data-act="wiz-source"][data-arg="SRC-LGA-UPLOAD"]');
+  u.click(u.$('[data-act="wiz-sample"]'));
+  await u.until(() => u.$('[data-act="wiz-start"]'));
+  const ack = u.$('#wiz-ack');
+  if (ack) { ack.checked = true; ack.dispatchEvent(new u.w.Event('change', { bubbles: true })); }
+  u.click('[data-act="wiz-start"]');
+  await u.until(() => u.$('[data-act="wiz-save"]'), 30000);
+  u.click('[data-act="wiz-done"]');
+  assert.equal(pushed.length, 0, 'nothing is saved without a key');
+  u.click('[data-act="nav"][data-arg="runs"]');
+  u.click('[data-act="tview"][data-arg="nsr"]');
+  assert.match(u.text(), /uploaded records are not on the server yet/, 'the screen says so before Connect');
+  type('#nsr-key', 'standard-key-ui');
+  await u.until(() => !u.button('Connect').disabled);
+  u.click(u.button('Connect'));
+  await u.until(() => new RegExp(pushed.length ? pushed[0].nsr_household_serial : 'never').test(u.text()));
+  assert.ok(order.indexOf('/api/v1/records') < order.findIndex((x) => x.endsWith('/households')), 'saved before the list is read');
+  assert.match(u.text(), /records saved\./);
+  assert.doesNotMatch(u.text(), /not on the server yet/);
+  const count = pushed.length;
+  u.click(u.button('Refresh'));
+  await sleep(300);
+  assert.equal(pushed.length, count, 'a saved transfer is not sent again');
+  assert.ok(!u.failed());
+  assert.deepEqual(u.errors, []);
+});
