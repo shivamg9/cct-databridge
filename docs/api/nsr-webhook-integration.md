@@ -67,7 +67,7 @@ Code: `server/integrations/nsr/`
 | `delivery-store.js` | Durable delivery state (JSON file, atomic rename) and the JSONL audit trail |
 | `delivery-service.js` | Preview, submit, dispatch, retry, reconcile, recovery after restart, retry timer |
 
-Nothing is sent automatically: not at startup, not when demo records are seeded, not on push or pull. Only `submit` requests from an operator create deliveries. The timer only resends deliveries that were already submitted and are due for a retry.
+Nothing is sent on its own: not at startup, not when demo records are seeded, not on push or pull. With `NSR_WEBHOOK_AUTO_SEND=true`, an operator's submitted transfer is queued through `/submit/auto`; it still needs the submit key and an operator name, and blocked or already-sent households are skipped, including an accepted household whose data changed. Only `submit` requests from an operator create deliveries. The timer only resends deliveries that were already submitted and are due for a retry.
 
 ## 3. DataBridge API
 
@@ -80,7 +80,8 @@ All endpoints need `X-API-Key`. Submit, retry and reconcile need the **NSR submi
 | `POST` | `/api/v1/nsr/preview` | API | `{ "household_serials": [...], "batch_format"? }`: validation results and the exact request NSR would receive. Never sends |
 | `POST` | `/api/v1/nsr/submit` | submit | `{ "household_serial": "...", "confirm": true, "resubmit"? }` |
 | `POST` | `/api/v1/nsr/submit/batch` | submit | `{ "household_serials": [...], "batch_format"?: "records" \| "array", "confirm": true, "resubmit"? }` |
-| `GET` | `/api/v1/nsr/deliveries[?status=&household_serial=&page=&page_size=]` | API | Delivery list, newest first |
+| `POST` | `/api/v1/nsr/submit/auto` | submit | `{ "household_serials": [...], "confirm": true, "source"?: "..." }`: needs `NSR_WEBHOOK_AUTO_SEND=true`. Queues up to 2000 households and returns `202` at once with `queued_households`, `deliveries` and `skipped` (`household_serial`, `codes`). The server splits them by `NSR_WEBHOOK_MAX_BATCH_HOUSEHOLDS` and `NSR_WEBHOOK_MAX_BODY_BYTES`, and sends them in the background |
+| `GET` | `/api/v1/nsr/deliveries[?status=&household_serial=&page=&page_size=]` | API | Delivery list, newest first. This is Send History: each item has `created_at` (queued), `first_attempt_at`, `last_attempt_at`, `origin` (`auto` or `manual`), `source`, `created_by`, `record_count` and each household's `record_ids` |
 | `GET` | `/api/v1/nsr/deliveries/{id}` | API | One delivery with every attempt. The payload is not returned |
 | `POST` | `/api/v1/nsr/deliveries/{id}/retry` | submit | Send again now. For `CONFIRMATION_PENDING`, needs `{ "confirm_not_received": true }` |
 | `POST` | `/api/v1/nsr/deliveries/{id}/reconcile` | submit | For `CONFIRMATION_PENDING`: `{ "outcome": "ACCEPTED" \| "NOT_RECEIVED", "note": "...", "correlation_id"? }` |
@@ -161,6 +162,7 @@ NSR ingestion is asynchronous. The NSR answer (specification §6) is recorded in
 | `NSR_WEBHOOK_SIGNATURE` | — (**secret**) | `signature`. Required when enabled |
 | `DATABRIDGE_NSR_SUBMIT_KEY` | — (**secret**) | Key that may submit, retry and reconcile. Required when enabled; must differ from the other keys |
 | `NSR_WEBHOOK_ALLOW_SYNTHETIC` | `false` | Allow `synthetic: true` households. Only for an approved test in staging |
+| `NSR_WEBHOOK_AUTO_SEND` | `false` | Allow `/submit/auto`: a submitted transfer goes to NSR with no per-household preview |
 | `NSR_WEBHOOK_TIMEOUT_MS` | `20000` | Per request. Keep below the frontend proxy's 30 s read timeout |
 | `NSR_WEBHOOK_MAX_RETRIES` | `5` | Automatic retries before `DELIVERY_FAILED` |
 | `NSR_WEBHOOK_RETRY_BASE_MS` / `_MAX_MS` | `30000` / `1800000` | Backoff base and cap |

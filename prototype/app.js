@@ -98,9 +98,11 @@
     schemaQ: { q: '', object: '', mandatory: '', sens: '', fill: '' },
     reconScope: '', reconOpen: null, lineQ: '', auditQ: '', sourceForm: null, modal: null, toast: null, animating: new Set(), auto: false, payloadView: null,
     // Send to NSR. Keys live in this object only (page memory), never in storage.
-    nsr: { key: '', submitKey: '', operator: '', cfg: null, households: null, deliveries: null, selected: [], preview: null, result: null, confirm: false, busy: false, error: null, notes: {} },
+    nsr: { key: '', submitKey: '', operator: '', cfg: null, households: null, deliveries: null, selected: [], preview: null, result: null, confirm: false, busy: false, error: null, notes: {}, auto: true },
+    // Add Records transfers not yet on the server, the latest save, and the latest automatic send. Page memory: a reload loses them.
+    unsaved: [], save: null, autoSend: null,
   };
-  function newWizard() { return { step: 1, sourceId: '', mode: '', file: null, upload: null, headerCheck: null, sim: {}, dry: null, ack: false, testResult: null, runId: null, showIssues: false, save: null }; }
+  function newWizard() { return { step: 1, sourceId: '', mode: '', file: null, upload: null, headerCheck: null, sim: {}, dry: null, ack: false, testResult: null, runId: null, showIssues: false }; }
 
   // Settings pages are for administrators; anyone else asking for one lands on Home.
   const allowedPage = (page) => (T.SETTINGS_PAGES.includes(page) && !techAllowed() ? 'home' : page);
@@ -480,7 +482,8 @@
     DUPLICATE_MEMBER: 'The same person appears twice.', HOUSEHOLD_FIELD_CONFLICT: 'Members have different household details, for example the address.',
     MIXED_SYNTHETIC: 'Test and real records are mixed.', SYNTHETIC_NOT_ALLOWED: 'Test records cannot be sent to NSR here.',
     TOO_MANY_MEMBERS: 'Too many members for one submission.', HOUSEHOLD_NOT_FOUND: 'Household not found.',
-    NSR_WEBHOOK_DISABLED: 'Sending to NSR is switched off in this environment.', NSR_SUBMIT_FORBIDDEN: 'This key cannot send to NSR. Enter the NSR submit key.',
+    NSR_WEBHOOK_DISABLED: 'Sending to NSR is switched off in this environment.', NSR_AUTO_SEND_DISABLED: 'Automatic sending is switched off in this environment. The records are saved: send them from Send to NSR.',
+    ALREADY_ACCEPTED: 'Already sent and received by NSR.', DELIVERY_IN_PROGRESS: 'Already being sent.', ACCEPTED_BEFORE_CHANGED: 'Changed since NSR received it. Send it again by hand from Send to NSR.', BATCH_TOO_LARGE: 'Too large to send.', NSR_SUBMIT_FORBIDDEN: 'This key cannot send to NSR. Enter the NSR submit key.',
     UNAUTHORISED: 'The API key was not accepted.', OPERATOR_REQUIRED: 'Enter your name or operator ID.', DUPLICATE_SUBMISSION: 'Already sent, or being sent.',
     BATCH_TOO_LARGE: 'Too many households at once. Select fewer.', VALIDATION_FAILED: 'Some households need correction first.',
     CONFIRMATION_REQUIRED: 'Check NSR first, then confirm.', NOT_RETRYABLE: 'This delivery cannot be retried.', NETWORK: 'The DataBridge API cannot be reached from this page.',
@@ -507,15 +510,20 @@
   }
   async function nsrLoad() {
     const n = UI.nsr;
+    // Uploads reach the server here at the latest, so leaving the transfer screen early cannot lose them.
+    for (const id of UI.unsaved.filter((x) => !UI.animating.has(x))) await saveRun(E.getRun(id));
     n.cfg = await nsrApi('GET', '/config');
     n.households = (await nsrApi('GET', '/households')).items;
-    n.deliveries = (await nsrApi('GET', '/deliveries?page_size=50')).items;
+    n.deliveries = (await nsrApi('GET', '/deliveries?page_size=200')).items;
   }
 
   function nsrView() {
     const n = UI.nsr;
     const canSend = E.can('nsr.submit');
-    const err = n.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(n.error.code)}</b>${n.error.details && n.error.details.length ? html`<div class="small">${n.error.details.map((d) => html`<div>${d.household_serial || ''} ${d.errors ? d.errors.map((e) => nsrReason(e.code)).join(' ') : nsrReason(d.code)}</div>`)}</div>` : ''}</div>` : '';
+    const pending = UI.unsaved.reduce((t, id) => t + savable(E.getRun(id)).length, 0);
+    const queued = pending ? html`<div class="callout warn" role="status"><b>${num(pending)} uploaded records are not on the server yet.</b><div>${n.households ? 'Refresh' : 'Connect'} saves them. Reloading this page loses them.</div></div>` : '';
+    const saveState = html`${queued}${UI.save && !UI.save.busy ? saveNote({ ...UI.save, error: null }) : ''}`;
+    const err = n.error ? html`${saveState}<div class="callout crit" role="alert"><b>${nsrReason(n.error.code)}</b>${n.error.details && n.error.details.length ? html`<div class="small">${n.error.details.map((d) => html`<div>${d.household_serial || ''} ${d.errors ? d.errors.map((e) => nsrReason(e.code)).join(' ') : nsrReason(d.code)}</div>`)}</div>` : ''}</div>` : saveState;
     const connect = html`<section class="panel"><header><b>Connect</b>${n.cfg ? html`<span class="sub">${n.cfg.enabled ? 'Sending is on' : 'Sending is off: you can check households, nothing is sent'}</span>` : ''}</header><div class="body">
       <div class="filters">
         <label class="field">API key<input type="password" id="nsr-key" autocomplete="off" data-live data-bind="nsr.key" value="${n.key}"></label>
@@ -558,12 +566,13 @@
         <div>${r.correlation_id ? html`NSR reference: <b>${r.correlation_id}</b>. ` : ''}${r.status === 'ACCEPTED' ? 'NSR adds households in the background; confirm in the Household Register.' : r.last_reason || ''}</div></div>` : '';
 
     const dl = n.deliveries || [];
-    const deliveries = html`<section class="panel"><header><b>Deliveries</b><span class="sub">${num(dl.length)}</span></header><div class="body flush">${dl.length ? html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Sent</th><th>Households</th><th>Status</th><th>NSR reference</th><th>Tries</th><th></th></tr></thead><tbody>
-      ${dl.map((d) => html`<tr><td>${fmtTime(Date.parse(d.created_at), false)}</td><td class="small">${d.households.map((h) => h.household_serial).join(', ')}</td><td>${nsrPill(d.status)}</td><td class="small">${d.correlation_id || '—'}</td><td class="num">${num(d.attempt_count)}</td>
+    const when = (iso) => (iso ? fmtTime(Date.parse(iso), false) : '—');
+    const deliveries = html`<section class="panel"><header><b>Send History</b><span class="sub">${num(dl.length)}${dl.length >= 200 ? ' latest' : ''}</span>${dl.length ? html`<button class="btn sm" data-act="nsr-history-csv">Download History</button>` : ''}</header><div class="body flush">${dl.length ? html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Queued</th><th>First sent</th><th>Last try</th><th>Households</th><th>Records</th><th>How</th><th>Source</th><th>By</th><th>Status</th><th>NSR reference</th><th>Tries</th><th></th></tr></thead><tbody>
+      ${dl.map((d) => html`<tr><td>${when(d.created_at)}</td><td>${when(d.first_attempt_at)}</td><td>${when(d.last_attempt_at)}</td><td class="small">${d.households.map((h) => h.household_serial).join(', ')}</td><td class="num">${num(d.record_count || 0)}</td><td>${d.origin === 'auto' ? 'Automatic' : 'Manual'}</td><td class="small">${d.source || '—'}</td><td class="small">${d.created_by}</td><td>${nsrPill(d.status)}</td><td class="small">${d.correlation_id || '—'}</td><td class="num">${num(d.attempt_count)}</td>
         <td class="num">${['RETRY_SCHEDULED', 'DELIVERY_FAILED'].includes(d.status) && canSend ? html`<button class="btn sm" data-act="nsr-retry" data-arg="${d.id}" ${dis('nsr.submit')}>Retry</button>` : ''}
         ${d.status === 'CONFIRMATION_PENDING' && canSend ? html`<input class="sm" placeholder="What did you check in NSR?" data-bind="nsr.notes.${d.id}" value="${n.notes[d.id] || ''}">
           <button class="btn sm" data-act="nsr-reconcile" data-arg="${d.id}|ACCEPTED" ${dis('nsr.submit')}>Found in NSR</button><button class="btn sm" data-act="nsr-reconcile" data-arg="${d.id}|NOT_RECEIVED" ${dis('nsr.submit')}>Not in NSR</button>` : ''}</td></tr>`)}
-      </tbody></table></div>${moreDetails('Advanced details', html`<pre class="code">${JSON.stringify(dl.map((d) => ({ id: d.id, status: d.status, message_id: d.message_id, ack: d.ack, registry_commit: d.registry_commit, last_reason: d.last_reason, next_attempt_at: d.next_attempt_at, reconciliation: d.reconciliation })), null, 2)}</pre>`)}` : html`<div class="empty">Nothing sent yet.</div>`}</div></section>`;
+      </tbody></table></div>${moreDetails('Records in each send', html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Queued</th><th>Household</th><th>Records</th><th>Status</th></tr></thead><tbody>${dl.flatMap((d) => d.households.map((h) => html`<tr><td>${when(d.created_at)}</td><td class="small">${h.household_serial}</td><td class="small">${(h.record_ids || []).join(', ')}</td><td>${nsrPill(d.status)}</td></tr>`))}</tbody></table></div>`)}${moreDetails('Advanced details', html`<pre class="code">${JSON.stringify(dl.map((d) => ({ id: d.id, status: d.status, message_id: d.message_id, ack: d.ack, registry_commit: d.registry_commit, last_reason: d.last_reason, next_attempt_at: d.next_attempt_at, reconciliation: d.reconciliation })), null, 2)}</pre>`)}` : html`<div class="empty">Nothing sent yet.</div>`}</div></section>`;
     return html`${err}${connect}${result}${pick}${review}${send}${deliveries}`;
   }
 
@@ -971,6 +980,7 @@
       ${issues.length ? html`<div class="btns"><button class="btn" data-act="wiz-issues" aria-expanded="${w.showIssues}">${w.showIssues ? 'Hide Issues' : 'View Issues'}</button>${w.showIssues ? html`<button class="btn sm ghost" data-act="wiz-report" ${dis('report.download')}>Download Report</button>` : ''}</div>
         ${w.showIssues ? html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Record</th><th>Person</th><th>Issue</th></tr></thead><tbody>${issues.slice(0, 100).map((r) => html`<tr><td class="small">${r.sourceRecordId}</td><td>${person(r)}</td><td class="small">${recordIssue(r)}</td></tr>`)}</tbody></table></div>` : ''}
         ${rc.accepted ? html`<label class="row confirm"><input type="checkbox" id="wiz-ack" data-bind="wiz.ack" data-type="check" ${raw(w.ack ? 'checked' : '')}> Submit the ${num(rc.accepted)} valid records. ${num(issues.length)} will not be transferred.</label>` : ''}` : ''}
+      ${rc.accepted ? autoSendFields() : ''}
       ${rc.accepted ? html`<div><button class="btn primary lg" data-act="wiz-start" ${dis('run.start')} ${raw(!issues.length || w.ack ? '' : 'disabled title="Tick the box above first."')}>Submit ${num(rc.accepted)} Records</button></div>` : html`<div class="callout crit">No valid records. Correct the file and try again.</div>`}
       ${w.file && w.file.preview ? moreDetails('File Preview', html`<div class="tbl-wrap" style="max-height:320px"><table class="t"><thead><tr>${w.file.headers.map((h) => html`<th>${h}</th>`)}</tr></thead><tbody>${w.file.preview.map((r) => html`<tr>${w.file.headers.map((_, i) => { const v = r[i] === undefined ? '' : String(r[i]); return html`<td class="small ${/^[=+\-@]/.test(v) && !/^[+-]?\d/.test(v) ? 'formula' : ''}">${maskPreview(w.file.headers[i], v)}</td>`; })}</tr>`)}</tbody></table></div>`) : ''}
       ${techDetails(html`<dl class="kv small"><dt>Validation run</dt><dd class="mono">${d.dryRunId}</dd><dt>Mapping</dt><dd>v${d.mappingVersion}</dd>${w.file && w.file.checksum ? html`<dt>Checksum</dt><dd class="mono">sha256 ${w.file.checksum.slice(0, 24)}…</dd>` : ''}</dl><table class="t"><tbody>${d.stages.map((stg) => html`<tr><td class="mono small">${stg.key}</td><td class="mono small">${stg.status}</td><td class="small">${stg.note}</td></tr>`)}</tbody></table>`)}`;
@@ -987,26 +997,62 @@
     const attn = r.tone === 'crit' || run.records.some((x) => recordState(x, open)[0] === 'Needs Attention');
     return html`${resultBox(r)}${savePanel(run)}<div class="btns"><button class="btn" data-act="run" data-arg="${run.id}">${attn ? 'View Issues' : 'View Details'}</button><button class="btn primary lg" data-act="wiz-done">Done</button></div>`;
   }
+  // Keys stay in page memory, so an operator enters them once per page. Without all three, records wait on Send to NSR.
+  function autoSendFields() {
+    if (!E.can('nsr.submit')) return '';
+    const n = UI.nsr;
+    return html`<section class="panel"><header><b>Send to NSR</b></header><div class="body stack">
+      <label class="row confirm"><input type="checkbox" id="wiz-auto" data-bind="nsr.auto" data-type="check" ${raw(n.auto ? 'checked' : '')}> Send to NSR automatically after submitting</label>
+      ${n.auto ? html`<div class="filters">
+        <label class="field">API key<input type="password" id="wiz-send-key" autocomplete="off" data-live data-bind="nsr.key" value="${n.key}"></label>
+        <label class="field">NSR submit key<input type="password" id="wiz-send-submit-key" autocomplete="off" data-live data-bind="nsr.submitKey" value="${n.submitKey}"></label>
+        <label class="field">Your name or ID<input id="wiz-send-operator" autocomplete="off" data-live data-bind="nsr.operator" value="${n.operator}" maxlength="64"></label>
+      </div><div class="small muted">Valid households go to NSR with no further check. Keys stay in this page only.${autoReady() ? '' : ' Without all three, records wait for you on Send to NSR.'}</div>` : ''}
+    </div></section>`;
+  }
+  const autoReady = () => { const n = UI.nsr; return n.auto && n.key && n.submitKey && n.operator && E.can('nsr.submit'); };
+  // Saves the transfer, then hands its households to the server, which sends them in the background.
+  async function autoSend(run) {
+    if (!autoReady() || !savable(run).length) return;
+    await saveRun(run);
+    if (!UI.save.done) return;
+    const a = UI.autoSend = { runId: run.id, busy: true, error: null, queued_households: 0, deliveries: [], skipped: [] };
+    render();
+    const serials = [...new Set(savable(run).map((r) => r.canonical.nsr_household_serial).filter(Boolean))];
+    try { Object.assign(a, await nsrApi('POST', '/submit/auto', { household_serials: serials, confirm: true, source: run.sourceName }, true)); } catch (e) { a.error = e.code; }
+    a.busy = false;
+    render();
+  }
+  function autoNote(a) {
+    if (a.busy) return html`<div class="callout info" role="status"><b>Queuing for NSR…</b></div>`;
+    return html`${a.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(a.error)}</b></div>` : ''}
+      ${a.queued_households ? html`<div class="callout ok" role="status"><b>${num(a.queued_households)} households queued for NSR in ${num(a.deliveries.length)} ${a.deliveries.length === 1 ? 'send' : 'sends'}.</b><div>They go in the background, so you can close this page. Follow them in Send History.</div></div>` : ''}
+      ${a.skipped.length ? html`<div class="callout warn" role="status"><b>${num(a.skipped.length)} households not sent.</b><ul class="small">${a.skipped.slice(0, 20).map((s) => html`<li>${s.household_serial}: ${s.codes.map(nsrReason).join(' ')}</li>`)}</ul></div>` : ''}`;
+  }
   // Transfers run in this browser only. Send to NSR reads the server, so processed records are saved there explicitly.
   const savable = (run) => run.records.filter((r) => r.primary.masterId);
   function savePanel(run) {
     const count = savable(run).length;
     if (!count || !E.can('run.start')) return '';
-    const s = UI.wiz.save;
+    const s = UI.save && UI.save.runId === run.id ? UI.save : null;
     const saved = s && !s.busy && s.done > 0;
     return html`<section class="panel"><header><b>Save for Send to NSR</b></header><div class="body stack">
-      <p style="margin:0">${num(count)} records are ready. Save them to the server to send them to NSR.</p>
+      <p style="margin:0">${num(count)} records are ready. Save them here, or connect on Send to NSR.</p>
       <label class="field">API key<input type="password" id="wiz-api-key" autocomplete="off" data-live data-bind="nsr.key" value="${UI.nsr.key}"></label>
-      ${s && s.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(s.error)}</b></div>` : ''}
-      ${s && s.failed.length ? html`<div class="callout crit" role="alert"><b>${num(s.failed.length)} records were not saved.</b><ul class="small">${s.failed.slice(0, 20).map((f) => html`<li>${f}</li>`)}</ul></div>` : ''}
-      ${saved ? html`<div class="callout ok" role="status"><b>${num(s.done)} of ${num(s.total)} records saved.</b></div>` : ''}
+      ${s ? saveNote(s) : ''}
+      ${UI.autoSend && UI.autoSend.runId === run.id ? autoNote(UI.autoSend) : ''}
       <div class="btns"><button class="btn primary" data-act="wiz-save" ${raw(!UI.nsr.key || (s && s.busy) ? 'disabled' : '')}>${s && s.busy ? `Saving ${num(s.done)} of ${num(s.total)}` : 'Save to Server'}</button>
       ${saved && E.can('nsr.preview') ? html`<button class="btn" data-act="wiz-open-nsr">Open Send to NSR</button>` : ''}</div></div></section>`;
+  }
+  function saveNote(s) {
+    return html`${s.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(s.error)}</b></div>` : ''}
+      ${s.failed.length ? html`<div class="callout crit" role="alert"><b>${num(s.failed.length)} records were not saved.</b><ul class="small">${s.failed.slice(0, 20).map((f) => html`<li>${f}</li>`)}</ul></div>` : ''}
+      ${!s.busy && s.done > 0 ? html`<div class="callout ok" role="status"><b>${num(s.done)} of ${num(s.total)} records saved.</b></div>` : ''}`;
   }
   // One request per record, the API's limit. Saving again is safe: an unchanged record stays as it is.
   async function saveRun(run) {
     const records = savable(run).map((r) => DB.backendRecord(SCHEMA, r));
-    const s = UI.wiz.save = { busy: true, done: 0, total: records.length, failed: [], error: null };
+    const s = UI.save = { runId: run.id, busy: true, done: 0, total: records.length, failed: [], error: null };
     render();
     for (const rec of records) {
       let res, data;
@@ -1020,6 +1066,7 @@
       render();
     }
     s.busy = false;
+    if (!s.error && !s.failed.length) UI.unsaved = UI.unsaved.filter((id) => id !== run.id);
     render();
   }
   function simPanel() {
@@ -1397,6 +1444,10 @@
     nav: (p) => { if (p === 'ingest' && UI.page !== 'ingest') UI.wiz = UI.wiz.step > 1 && !UI.wiz.runId ? UI.wiz : newWizard(); go(p, p === 'lineage' ? { recordId: null } : null); },
     tview: (v) => { UI.tview = v; UI.errOpen = null; },
     'nsr-connect': () => nsrRun(nsrLoad),
+    'nsr-history-csv': () => {
+      const rows = (UI.nsr.deliveries || []).flatMap((d) => d.households.flatMap((h) => (h.record_ids || []).map((id) => [d.created_at, d.first_attempt_at || '', d.last_attempt_at || '', h.household_serial, id, d.origin, d.source || '', d.created_by, d.status, d.correlation_id || '', d.attempt_count, d.message_id])));
+      offerFile('nsr_send_history.csv', DB.toCsv([['queued_at', 'first_sent_at', 'last_try_at', 'household_serial', 'record_id', 'how', 'source', 'by', 'status', 'nsr_reference', 'tries', 'message_id']].concat(rows)), `${rows.length} records`);
+    },
     'nsr-toggle': (serial) => { const s = UI.nsr.selected; UI.nsr.selected = s.includes(serial) ? s.filter((x) => x !== serial) : s.concat(serial); UI.nsr.preview = null; UI.nsr.confirm = false; },
     'nsr-preview': () => nsrRun(async () => { UI.nsr.result = null; UI.nsr.confirm = false; UI.nsr.preview = await nsrApi('POST', '/preview', { household_serials: UI.nsr.selected }); }),
     'nsr-submit': () => nsrRun(async () => {
@@ -1513,7 +1564,8 @@
       const res = E.startRun(w.sourceId, { mode: w.mode, sim: { ...w.sim }, file: w.file ? engineFile(w.file) : null, approvedBy: S.user, dryRunRef: w.dry ? w.dry.dryRunId : null });
       if (res.blocked) { toast(`Blocked: ${srcName(w.sourceId)} is disabled.`, true); return; }
       w.runId = res.id;
-      animate(res);
+      UI.unsaved.push(res.id);
+      animate(res, autoSend);
     },
     scenario: (id) => startScenario(id),
     'modal-close': () => { UI.modal = null; UI.payloadView = null; },

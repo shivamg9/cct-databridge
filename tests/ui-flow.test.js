@@ -262,3 +262,92 @@ test('after a transfer, Save to Server pushes each record, then Send to NSR open
   assert.ok(!u.failed());
   assert.deepEqual(u.errors, []);
 });
+
+test('leaving a finished transfer without saving does not lose it: Connect on Send to NSR saves it first', { skip }, async () => {
+  const u = boot();
+  const order = [];
+  const pushed = [];
+  const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+  u.w.fetch = async (url, opts) => {
+    order.push(url);
+    if (url === '/api/v1/records') { pushed.push(JSON.parse(opts.body)); return reply(201, { status: 'CREATED' }); }
+    if (url.endsWith('/config')) return reply(200, { enabled: true });
+    if (url.endsWith('/households')) return reply(200, { items: [{ household_serial: pushed[0].nsr_household_serial, status: 'READY', members: 1, errors: [], warnings: 0, latest_delivery: null }] });
+    return reply(200, { items: [] });
+  };
+  const type = (sel, v) => { const el = u.$(sel); el.value = v; el.dispatchEvent(new u.w.Event('input', { bubbles: true })); };
+  u.click('[data-act="nav"][data-arg="ingest"]');
+  u.click('[data-act="wiz-source"][data-arg="SRC-LGA-UPLOAD"]');
+  u.click(u.$('[data-act="wiz-sample"]'));
+  await u.until(() => u.$('[data-act="wiz-start"]'));
+  const ack = u.$('#wiz-ack');
+  if (ack) { ack.checked = true; ack.dispatchEvent(new u.w.Event('change', { bubbles: true })); }
+  u.click('[data-act="wiz-start"]');
+  await u.until(() => u.$('[data-act="wiz-save"]'), 30000);
+  u.click('[data-act="wiz-done"]');
+  assert.equal(pushed.length, 0, 'nothing is saved without a key');
+  u.click('[data-act="nav"][data-arg="runs"]');
+  u.click('[data-act="tview"][data-arg="nsr"]');
+  assert.match(u.text(), /uploaded records are not on the server yet/, 'the screen says so before Connect');
+  type('#nsr-key', 'standard-key-ui');
+  await u.until(() => !u.button('Connect').disabled);
+  u.click(u.button('Connect'));
+  await u.until(() => new RegExp(pushed.length ? pushed[0].nsr_household_serial : 'never').test(u.text()));
+  assert.ok(order.indexOf('/api/v1/records') < order.findIndex((x) => x.endsWith('/households')), 'saved before the list is read');
+  assert.match(u.text(), /records saved\./);
+  assert.doesNotMatch(u.text(), /not on the server yet/);
+  const count = pushed.length;
+  u.click(u.button('Refresh'));
+  await sleep(300);
+  assert.equal(pushed.length, count, 'a saved transfer is not sent again');
+  assert.ok(!u.failed());
+  assert.deepEqual(u.errors, []);
+});
+
+test('with the keys entered on the review step, submitting saves and queues the transfer, and Send History records it', { skip }, async () => {
+  const u = boot();
+  const calls = [];
+  const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+  const at = new Date().toISOString();
+  u.w.fetch = async (url, opts) => {
+    calls.push({ url, headers: opts.headers, body: opts.body && JSON.parse(opts.body) });
+    if (url === '/api/v1/records') return reply(201, { status: 'CREATED' });
+    if (url.endsWith('/submit/auto')) return reply(202, { queued_households: 2, deliveries: [{ id: 'dlv-1' }], skipped: [{ household_serial: 'HH-SKIP', codes: ['ALREADY_ACCEPTED'] }] });
+    if (url.endsWith('/config')) return reply(200, { enabled: true, auto_send: true });
+    if (url.endsWith('/households')) return reply(200, { items: [] });
+    if (url.includes('/deliveries')) return reply(200, { items: [{ id: 'dlv-1', status: 'ACCEPTED', origin: 'auto', source: 'Test source', created_by: 'operator.ui', created_at: at, first_attempt_at: at, last_attempt_at: at, record_count: 1, attempt_count: 1, correlation_id: 'ref-123', message_id: 'm-1', households: [{ household_serial: 'HH-A', record_ids: ['REC-A1'] }] }] });
+    return reply(404, { error: { code: 'NOT_FOUND' } });
+  };
+  const type = (sel, v) => { const el = u.$(sel); el.value = v; el.dispatchEvent(new u.w.Event('input', { bubbles: true })); };
+  u.click('[data-act="nav"][data-arg="ingest"]');
+  u.click('[data-act="wiz-source"][data-arg="SRC-LGA-UPLOAD"]');
+  u.click(u.$('[data-act="wiz-sample"]'));
+  await u.until(() => u.$('[data-act="wiz-start"]'));
+  type('#wiz-send-key', 'standard-key-ui');
+  await sleep(150);
+  type('#wiz-send-submit-key', 'submit-key-ui');
+  await sleep(150);
+  type('#wiz-send-operator', 'operator.ui');
+  await sleep(150);
+  const ack = u.$('#wiz-ack');
+  if (ack) { ack.checked = true; ack.dispatchEvent(new u.w.Event('change', { bubbles: true })); }
+  u.click('[data-act="wiz-start"]');
+  await u.until(() => /queued for NSR/.test(u.text()), 30000);
+  const records = calls.filter((c) => c.url === '/api/v1/records');
+  const auto = calls.find((c) => c.url.endsWith('/submit/auto'));
+  assert.ok(records.length > 0 && calls.indexOf(auto) > calls.indexOf(records[records.length - 1]), 'saved first, then queued');
+  assert.equal(records[0].headers['X-API-Key'], 'standard-key-ui');
+  assert.equal(auto.headers['X-API-Key'], 'submit-key-ui');
+  assert.equal(auto.headers['X-Operator-Id'], 'operator.ui');
+  assert.equal(new Set(auto.body.household_serials).size, auto.body.household_serials.length);
+  assert.match(u.text(), /you can close this page/);
+  assert.match(u.text(), /HH-SKIP: Already sent and received by NSR\./, 'skipped households say why');
+  u.click('[data-act="wiz-open-nsr"]');
+  await u.until(() => /Send History/.test(u.text()) && /ref-123/.test(u.text()));
+  assert.match(u.text(), /Automatic/);
+  assert.match(u.text(), /operator\.ui/);
+  assert.match(u.text(), /REC-A1/, 'each record can be traced');
+  u.click('[data-act="nsr-history-csv"]');
+  assert.ok(!u.failed());
+  assert.deepEqual(u.errors, []);
+});

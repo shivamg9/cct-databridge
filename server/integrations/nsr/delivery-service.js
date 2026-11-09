@@ -1,8 +1,9 @@
-// Outbound NSR workflow: preview, submit, dispatch, retry, reconcile, and a timer that resends due retries.
-// Nothing is sent unless an operator explicitly submits households. Seeding, pulls and startup never send.
+// Outbound NSR workflow: preview, submit, queue, dispatch, retry, reconcile, and a timer that sends what is due.
+// Nothing is sent unless an operator submits households, or submits a transfer with NSR_WEBHOOK_AUTO_SEND=true.
+// Seeding, pulls, pushes and startup never send.
 //
 // Delivery statuses
-//   PENDING               created and being sent
+//   PENDING               queued or being sent
 //   ACCEPTED              NSR acknowledged the message (ACK). Ingestion is asynchronous: this is NOT proof
 //                         the household is in the register (registry_commit stays NOT_CONFIRMED)
 //   REJECTED              NSR answered and refused it (4xx, NACK). Fix the data and submit again
@@ -19,6 +20,8 @@ const crypto = require('node:crypto');
 
 const ACTIVE = new Set(['PENDING', 'RETRY_SCHEDULED', 'CONFIRMATION_PENDING']);
 const SERIAL = /^[A-Za-z0-9._\/-]{1,100}$/;
+const MAX_QUEUE_SERIALS = 2000;
+const ENVELOPE_BYTES = 1024; // room for the header and signature when sizing a batch
 
 class NsrError extends Error {
   constructor(status, code, message, details) { super(message); this.status = status; this.code = code; this.details = details || []; }
@@ -108,39 +111,89 @@ function createNsrService({ cfg, records, deliveries, log, now, send }) {
     if (invalid.length) {
       throw new NsrError(422, 'VALIDATION_FAILED', 'One or more households cannot be sent; nothing was sent', invalid.map((h) => ({ household_serial: h.household_serial, errors: h.errors })));
     }
-    // Duplicate protection: one live delivery per household, and no silent resend of an accepted one.
-    const clashes = [];
-    for (const h of built) {
-      for (const d of deliveriesFor(h.household_serial)) {
-        const mine = d.households.find((x) => x.household_serial === h.household_serial);
-        if (ACTIVE.has(d.status)) clashes.push({ household_serial: h.household_serial, code: 'DELIVERY_IN_PROGRESS', delivery_id: d.id, status: d.status });
-        else if (d.status === 'ACCEPTED' && mine.content_hash === h.content_hash) clashes.push({ household_serial: h.household_serial, code: 'ALREADY_ACCEPTED', delivery_id: d.id, status: d.status });
-        else if (d.status === 'ACCEPTED' && body.resubmit !== true) clashes.push({ household_serial: h.household_serial, code: 'ACCEPTED_BEFORE_CHANGED', delivery_id: d.id, status: d.status });
-        else continue;
-        break;
-      }
-    }
+    const clashes = built.map((h) => clashFor(h, body.resubmit === true)).filter(Boolean);
     if (clashes.length) throw new NsrError(409, 'DUPLICATE_SUBMISSION', 'Already sent or being sent; nothing was sent. A changed household that NSR already accepted needs "resubmit": true.', clashes);
 
+    const d = newDelivery(built, format, { operator, idempotencyKey, resubmit: body.resubmit === true, origin: 'manual' });
+    const bytes = Buffer.byteLength(JSON.stringify(envelopeFor(d)));
+    if (bytes > cfg.maxBodyBytes) throw new NsrError(413, 'BATCH_TOO_LARGE', `The message would be ${bytes} bytes; the limit is ${cfg.maxBodyBytes} (NSR_WEBHOOK_MAX_BODY_BYTES). Split the batch. Nothing was sent.`);
+    deliveries.items[d.id] = d;
+    deliveries.save();
+    deliveries.audit({ action: 'NSR_SUBMITTED', delivery_id: d.id, operator, format, households: d.households.map((h) => h.household_serial), records: recordCount(d), message_id: d.message_id });
+    await dispatch(d.id, operator);
+    return { status: 201, delivery: summary(deliveries.items[d.id]) };
+  }
+
+  // Duplicate protection: one live delivery per household, and no silent resend of an accepted one.
+  function clashFor(h, resubmit) {
+    for (const d of deliveriesFor(h.household_serial)) {
+      const mine = d.households.find((x) => x.household_serial === h.household_serial);
+      if (ACTIVE.has(d.status)) return { household_serial: h.household_serial, code: 'DELIVERY_IN_PROGRESS', delivery_id: d.id, status: d.status };
+      if (d.status === 'ACCEPTED' && mine.content_hash === h.content_hash) return { household_serial: h.household_serial, code: 'ALREADY_ACCEPTED', delivery_id: d.id, status: d.status };
+      if (d.status === 'ACCEPTED' && !resubmit) return { household_serial: h.household_serial, code: 'ACCEPTED_BEFORE_CHANGED', delivery_id: d.id, status: d.status };
+    }
+    return null;
+  }
+
+  function newDelivery(built, format, { operator, idempotencyKey, resubmit, origin, source }) {
     const at = clock();
-    const d = {
+    return {
       id: 'dlv-' + crypto.randomUUID(),
       status: 'PENDING', format, message_id: newMessageId(), message_timestamp: at,
       households: built.map((h) => ({ household_serial: h.household_serial, record_ids: h.record_ids, content_hash: h.content_hash, synthetic: h.synthetic })),
       messages: built.map((h) => h.message),
       created_at: new Date(at).toISOString(), updated_at: new Date(at).toISOString(), created_by: operator,
-      idempotency_key: idempotencyKey || null, resubmit: body.resubmit === true,
+      origin, source: source || null,
+      idempotency_key: idempotencyKey || null, resubmit: resubmit === true,
       attempts: [], attempt_count: 0, retry_budget_from: 0, next_attempt_at: null, in_flight: false,
       ack: null, correlation_id: null, registry_commit: 'NOT_CONFIRMED', last_reason: null, reconciliation: null,
     };
-    const bytes = Buffer.byteLength(JSON.stringify(envelopeFor(d)));
-    if (bytes > cfg.maxBodyBytes) throw new NsrError(413, 'BATCH_TOO_LARGE', `The message would be ${bytes} bytes; the limit is ${cfg.maxBodyBytes} (NSR_WEBHOOK_MAX_BODY_BYTES). Split the batch. Nothing was sent.`);
-    deliveries.items[d.id] = d;
-    deliveries.save();
-    deliveries.audit({ action: 'NSR_SUBMITTED', delivery_id: d.id, operator, format, households: d.households.map((h) => h.household_serial), records: d.households.reduce((n, h) => n + h.record_ids.length, 0), message_id: d.message_id });
-    await dispatch(d.id, operator);
-    return { status: 201, delivery: summary(deliveries.items[d.id]) };
   }
+
+  // Ready households in message-sized groups, within the household and byte limits.
+  function batches(ready) {
+    const out = [];
+    let group = [], bytes = ENVELOPE_BYTES;
+    for (const h of ready) {
+      const size = Buffer.byteLength(JSON.stringify(h.message));
+      if (group.length && (group.length >= cfg.maxBatchHouseholds || bytes + size > cfg.maxBodyBytes)) { out.push(group); group = []; bytes = ENVELOPE_BYTES; }
+      group.push(h);
+      bytes += size;
+    }
+    if (group.length) out.push(group);
+    return out;
+  }
+
+  // Automatic send: stores the batches and returns at once; the timer sends them, so closing the page does not
+  // stop them, and a restart picks them up. Anything not ready is skipped and reported. An accepted household
+  // is never resent here, even if it changed: that stays an operator's decision.
+  function queue(body, { operator }) {
+    if (!cfg.enabled) throw new NsrError(503, 'NSR_WEBHOOK_DISABLED', 'The NSR webhook is disabled (NSR_WEBHOOK_ENABLED=false). Nothing was sent.');
+    if (!cfg.autoSend) throw new NsrError(503, 'NSR_AUTO_SEND_DISABLED', 'Automatic sending is off (NSR_WEBHOOK_AUTO_SEND=false). Nothing was queued.');
+    if (!body || body.confirm !== true) throw new NsrError(400, 'CONFIRMATION_REQUIRED', 'Send "confirm": true to queue households');
+    const list = body.household_serials;
+    if (!Array.isArray(list) || !list.length || list.length > MAX_QUEUE_SERIALS || list.some((s) => typeof s !== 'string' || !SERIAL.test(s))) {
+      throw new NsrError(400, 'INVALID_REQUEST', `Send { "household_serials": ["<serial>", ...] } with at most ${MAX_QUEUE_SERIALS} serials`);
+    }
+    const source = typeof body.source === 'string' ? body.source.trim().slice(0, 100) : null;
+    const groups = groupHouseholds(records);
+    const ready = [], skipped = [];
+    for (const serial of new Set(list)) {
+      const h = build(serial, groups);
+      const clash = h.status === 'READY' ? clashFor(h, false) : null;
+      if (h.status !== 'READY') skipped.push({ household_serial: serial, codes: h.errors.map((e) => e.code) });
+      else if (clash) skipped.push({ household_serial: serial, codes: [clash.code], delivery_id: clash.delivery_id });
+      else if (Buffer.byteLength(JSON.stringify(h.message)) + ENVELOPE_BYTES > cfg.maxBodyBytes) skipped.push({ household_serial: serial, codes: ['BATCH_TOO_LARGE'] });
+      else ready.push(h);
+    }
+    const created = batches(ready).map((group) => newDelivery(group, group.length === 1 ? 'single' : 'records', { operator, origin: 'auto', source }));
+    for (const d of created) deliveries.items[d.id] = d;
+    if (created.length) deliveries.save();
+    for (const d of created) deliveries.audit({ action: 'NSR_QUEUED', delivery_id: d.id, operator, format: d.format, households: d.households.map((h) => h.household_serial), records: recordCount(d), message_id: d.message_id });
+    if (created.length) setImmediate(() => { tick().catch((e) => say(`nsr send timer error: ${e.message}`)); });
+    return { status: 202, body: { queued_households: ready.length, deliveries: created.map(summary), skipped } };
+  }
+  const recordCount = (d) => d.households.reduce((n, h) => n + h.record_ids.length, 0);
 
   const envelopeFor = (d) => buildEnvelope({ messages: d.messages, format: d.format, messageId: d.message_id, timestamp: d.message_timestamp, partnerId: cfg.partnerId, signature: cfg.signature });
 
@@ -232,7 +285,10 @@ function createNsrService({ cfg, records, deliveries, log, now, send }) {
   function summary(d) {
     return {
       id: d.id, status: d.status, format: d.format, message_id: d.message_id, created_at: d.created_at, updated_at: d.updated_at, created_by: d.created_by,
+      // Deliveries stored before automatic sending have no origin: they were all manual.
+      origin: d.origin || 'manual', source: d.source || null, record_count: recordCount(d),
       households: d.households.map((h) => ({ household_serial: h.household_serial, record_ids: h.record_ids, content_hash: h.content_hash })),
+      first_attempt_at: d.attempts.length ? d.attempts[0].at : null, last_attempt_at: d.attempts.length ? d.attempts[d.attempts.length - 1].at : null,
       attempt_count: d.attempt_count, next_attempt_at: d.next_attempt_at, last_reason: d.last_reason,
       ack: d.ack, correlation_id: d.correlation_id, registry_commit: d.registry_commit, reconciliation: d.reconciliation,
     };
@@ -279,12 +335,12 @@ function createNsrService({ cfg, records, deliveries, log, now, send }) {
   function start() {
     recover();
     if (!cfg.enabled || timer) return;
-    timer = setInterval(() => { tick().catch((e) => say(`nsr retry timer error: ${e.message}`)); }, cfg.workerIntervalMs);
+    timer = setInterval(() => { tick().catch((e) => say(`nsr send timer error: ${e.message}`)); }, cfg.workerIntervalMs);
     timer.unref();
   }
   function stop() { if (timer) clearInterval(timer); timer = null; }
 
-  return { listHouseholds, preview, submit, retry, reconcile, list, detail, recover, tick, start, stop, config: () => publicConfig(cfg) };
+  return { listHouseholds, preview, submit, queue, retry, reconcile, list, detail, recover, tick, start, stop, config: () => publicConfig(cfg) };
 }
 
 module.exports = { createNsrService, NsrError };

@@ -10,6 +10,7 @@ services:
       NSR_WEBHOOK_BASE_URL: https://staff-nsr.openg2p.dpiforall.com
       NSR_WEBHOOK_INSECURE_TEST_ENDPOINT: "false"
       NSR_WEBHOOK_ALLOW_SYNTHETIC: "true"
+      NSR_WEBHOOK_AUTO_SEND: "${NSR_WEBHOOK_AUTO_SEND:-false}"
       NSR_WEBHOOK_SIGNATURE: ${NSR_WEBHOOK_SIGNATURE:?Set NSR_WEBHOOK_SIGNATURE in .env}
       DATABRIDGE_NSR_SUBMIT_KEY: ${DATABRIDGE_NSR_SUBMIT_KEY:?Set DATABRIDGE_NSR_SUBMIT_KEY in .env (see .env.example)}
       NSR_WEBHOOK_DELIVERY_FILE: /data/real-nsr-deliveries.json

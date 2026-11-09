@@ -249,7 +249,7 @@ test('origin and changed_by separate the two directions and stop push-pull loops
     body = await (await push(base, edited)).json();
     assert.equal(body.status, 'UPDATED');
     const it = store.items['SR1-0000001'];
-    assert.deepEqual([it.meta.origin, it.meta.last_changed_by, it.record.data_source], ['databridge-ingestion', 'openg2p-push', 'NASSCO National Social Registry']);
+    assert.deepEqual([it.meta.origin, it.meta.last_changed_by, it.record.data_source], ['databridge-ingestion', 'openg2p-push', 'LGA Beneficiary List Upload']);
     await push(base, SAMPLE);
 
     const ids = async (qs) => (await (await pull(base, qs)).json()).items.map((x) => x.record.internal_record_id);

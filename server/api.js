@@ -164,6 +164,7 @@ function createServer(opts) {
     })],
     ['POST', /^\/api\/v1\/nsr\/submit$/, 'submit', submitWith(true)],
     ['POST', /^\/api\/v1\/nsr\/submit\/batch$/, 'submit', submitWith(false)],
+    ['POST', /^\/api\/v1\/nsr\/submit\/auto$/, 'submit', (ctx) => ctx.body((b) => { const r = nsr.queue(b, { operator: ctx.operator }); ctx.ok(r.status, r.body); })],
     ['GET', /^\/api\/v1\/nsr\/deliveries$/, 'read', (ctx) => ctx.ok(200, nsr.list(ctx.query))],
     ['GET', /^\/api\/v1\/nsr\/deliveries\/([A-Za-z0-9-]{1,80})$/, 'read', (ctx) => ctx.ok(200, nsr.detail(ctx.params[0]))],
     ['POST', /^\/api\/v1\/nsr\/deliveries\/([A-Za-z0-9-]{1,80})\/retry$/, 'submit', (ctx) => ctx.body((b) => nsr.retry(ctx.params[0], b, ctx.operator).then((d) => ctx.ok(200, d)), true)],
