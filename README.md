@@ -145,7 +145,8 @@ DataBridge can send households to the NSR Household Register through `POST /part
 - **Off by default** (`NSR_WEBHOOK_ENABLED=false`): preview works, nothing is sent. The base `docker-compose.yml` fixes it off; `docker-compose.nsr-mock.yml` turns it on against a local mock only.
 - **API**: `/api/v1/nsr/config`, `/households`, `/preview`, `/submit`, `/submit/batch`, `/deliveries[/{id}[/retry|/reconcile]]`. Submitting needs a separate key (`DATABRIDGE_NSR_SUBMIT_KEY`) and an `X-Operator-Id`.
 - **Console**: Transfers → Send to NSR. It lists records on the server. Add Records runs in the browser, so its records reach the server through **Save to Server** on the finished transfer, or when you Connect or Refresh on Send to NSR. Reloading the page before that loses them. To load a sheet without the console: `node scripts/load-households-csv.js docs/samples/nsr-test-households.csv --url <base url>`.
-- **Never sent automatically**: not at startup, not on seed, push or pull. Uncertain outcomes are reconciled by a person, never resent blindly.
+- **Automatic send** (`NSR_WEBHOOK_AUTO_SEND=true`, off by default): with the keys entered on the review step of Add Records, submitting a transfer saves it and queues its households. The server sends them in the background in batches, and skips any household that is blocked or already sent. Send History on Transfers → Send to NSR lists every send with its timestamps, and can be downloaded as CSV.
+- **Never sent on its own**: not at startup, not on seed, push or pull. Uncertain outcomes are reconciled by a person, never resent blindly.
 - **Real NSR**: a single synthetic household reached the NSR Household intake form on 5 Nov 2026 (`docker-compose.nsr-real.yml` points the local stack at it). Batches are not yet proven there. Open questions for the NSR team (signature, authentication, commit status, code values, defaults) are listed in the integration reference.
 
 Docs: [nsr-webhook-integration.md](docs/api/nsr-webhook-integration.md) (reference and open questions), [nsr-field-mapping.md](docs/api/nsr-field-mapping.md) (all 202 NSR fields, generated from `server/integrations/nsr/mapping.json`), [nsr-delivery-operations.md](docs/operations/nsr-delivery-operations.md), [nsr-deployment-runbook.md](docs/operations/nsr-deployment-runbook.md).
@@ -202,7 +203,7 @@ Pending before connecting to the real NSR (details in [nsr-webhook-integration.m
 6. **S13, replication delayed.** Records are written to Master Registry 1 but Master Registry 2 lags. Advanced Details shows *Replication pending*, then *Replication delayed* after 60 s. Press **+3 min** and replication is confirmed.
 7. **S06, duplicates in file.** Duplicates are held back, and a `=HYPERLINK(...)` cell is highlighted in the preview and rejected.
 8. **S18, malicious upload.** A file named `.xlsx` that is actually HTML is quarantined and never parsed.
-9. **Operator journey.** As Transfer operator: **Add Records** → LGA Beneficiary List Upload → *Demo Files → Duplicates* → **Review and Submit** → **Done**. Then **Transfers → Needs Attention** (*Retry*, *Reconcile*, *View*, *Mark Reviewed*). As an administrator, open **Settings** for sources, mapping, lineage and reconciliation.
+9. **Operator journey.** As Transfer operator: **Add Records** → NASSCO National Social Registry → *Demo Files → Duplicates* → **Review and Submit** → **Done**. Then **Transfers → Needs Attention** (*Retry*, *Reconcile*, *View*, *Mark Reviewed*). As an administrator, open **Settings** for sources, mapping, lineage and reconciliation.
 
 ## What is implemented vs simulated
 

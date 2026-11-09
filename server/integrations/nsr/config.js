@@ -39,6 +39,8 @@ function nsrConfigFromEnv(env, base) {
     signature: env.NSR_WEBHOOK_SIGNATURE || null,
     submitKey: env.DATABRIDGE_NSR_SUBMIT_KEY || null,
     allowSynthetic: bool(env, 'NSR_WEBHOOK_ALLOW_SYNTHETIC', 'false'),
+    // Lets an operator's submitted transfer queue its households without a per-household preview.
+    autoSend: bool(env, 'NSR_WEBHOOK_AUTO_SEND', 'false'),
     // Plain HTTP for a local mock only. Never for the real registry.
     allowInsecureTestEndpoint: bool(env, 'NSR_WEBHOOK_INSECURE_TEST_ENDPOINT', 'false'),
     timeoutMs: int(env, 'NSR_WEBHOOK_TIMEOUT_MS', 20000, 1000, 120000),
@@ -85,6 +87,7 @@ function publicConfig(cfg) {
     signature_configured: Boolean(cfg.signature),
     submit_key_configured: Boolean(cfg.submitKey),
     allow_synthetic: cfg.allowSynthetic,
+    auto_send: cfg.autoSend,
     insecure_test_endpoint: cfg.endpoint.startsWith('http:'),
     limits: { timeout_ms: cfg.timeoutMs, max_retries: cfg.maxRetries, max_batch_households: cfg.maxBatchHouseholds, max_members: cfg.maxMembers, max_body_bytes: cfg.maxBodyBytes },
   };

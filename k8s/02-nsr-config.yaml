@@ -16,6 +16,8 @@ data:
   NSR_WEBHOOK_PARTNER_ID: CCT_DATABRIDGE
   # This deployment holds synthetic records only. Turn on only for an approved synthetic test in staging.
   NSR_WEBHOOK_ALLOW_SYNTHETIC: "false"
+  # A submitted transfer queues its households for NSR without a per-household preview.
+  NSR_WEBHOOK_AUTO_SEND: "false"
   # Below the frontend proxy's 30 s read timeout, so a submit request always gets an answer.
   NSR_WEBHOOK_TIMEOUT_MS: "20000"
   NSR_WEBHOOK_MAX_RETRIES: "5"

@@ -663,6 +663,59 @@ test('a console upload reaches the server store complete, with IDs that survive 
   assert.equal(DB.backendRecord(SCHEMA, { raw, canonical: { nsr_household_serial: 'NSR-HH-TEST-0001' } }).internal_record_id, 'TEST-REC-0001', 'a sheet that carries IDs keeps them, so it matches the CSV loader');
 });
 
+test('automatic send: off by default; queued at once, sent in the background in batches; not-ready households skipped', async () => {
+  await withMock(async (mock) => {
+    const hh = (n, extra) => F.household(`HH-AUTO-${n}`, 1, extra);
+    const store = storeWith(hh(1), hh(2), hh(3), hh(9, { head: { consent_to_share_data: false } }));
+    await withApi({ store, nsr: nsrCfg(mock.base, { maxBatchHouseholds: 2 }) }, async ({ call, op }) => {
+      const r = await call('POST', '/nsr/submit/auto', { household_serials: ['HH-AUTO-1'], confirm: true }, op);
+      assert.deepEqual([r.status, r.body.error.code], [503, 'NSR_AUTO_SEND_DISABLED'], 'off unless configured');
+      assert.equal(mock.received.length, 0);
+    });
+    await withApi({ store, nsr: nsrCfg(mock.base, { maxBatchHouseholds: 2, autoSend: true }) }, async ({ call, std, op }) => {
+      assert.equal((await call('POST', '/nsr/submit/auto', { household_serials: ['HH-AUTO-1'], confirm: true }, std)).status, 403, 'needs the submit key');
+      assert.equal((await call('POST', '/nsr/submit/auto', { household_serials: ['HH-AUTO-1'] }, op)).status, 400, 'needs confirm');
+      const serials = ['HH-AUTO-1', 'HH-AUTO-2', 'HH-AUTO-3', 'HH-AUTO-9', 'HH-AUTO-NONE'];
+      const r = await call('POST', '/nsr/submit/auto', { household_serials: serials, confirm: true, source: 'Test source' }, op);
+      assert.equal(r.status, 202);
+      assert.equal(r.body.queued_households, 3);
+      assert.deepEqual(r.body.deliveries.map((d) => d.households.length), [2, 1], 'split at the batch limit');
+      assert.deepEqual(r.body.deliveries.map((d) => d.format), ['records', 'single']);
+      assert.deepEqual(r.body.skipped.map((s) => [s.household_serial, s.codes[0]]), [['HH-AUTO-9', 'CONSENT_NOT_GIVEN'], ['HH-AUTO-NONE', 'HOUSEHOLD_NOT_FOUND']]);
+      for (let i = 0; i < 50 && mock.received.length < 2; i++) await new Promise((ok) => setTimeout(ok, 20));
+      assert.equal(mock.received.length, 2, 'sent without any further request');
+      const list = (await call('GET', '/nsr/deliveries', undefined, std)).body.items;
+      for (let i = 0; i < 50 && !list.every((d) => d.status === 'ACCEPTED'); i++) { await new Promise((ok) => setTimeout(ok, 20)); list.splice(0, list.length, ...(await call('GET', '/nsr/deliveries', undefined, std)).body.items); }
+      assert.ok(list.every((d) => d.status === 'ACCEPTED' && d.origin === 'auto' && d.source === 'Test source' && d.created_by === 'operator.one' && d.first_attempt_at && d.last_attempt_at));
+      assert.equal(list.reduce((n, d) => n + d.record_count, 0), 3);
+      const again = await call('POST', '/nsr/submit/auto', { household_serials: ['HH-AUTO-1'], confirm: true }, op);
+      assert.deepEqual([again.body.queued_households, again.body.skipped[0].codes[0]], [0, 'ALREADY_ACCEPTED'], 'never sent twice');
+      assert.equal(mock.received.length, 2);
+    });
+  });
+});
+
+test('a queued send survives a restart: it is on disk before sending, and the next process sends it', async () => {
+  const { createNsrService } = require('../server/integrations/nsr/delivery-service.js');
+  const { createDeliveryStore } = require('../server/integrations/nsr/delivery-store.js');
+  await withMock(async (mock) => {
+    const dir = tmpDir();
+    const before = path.join(dir, 'before.json'), after = path.join(dir, 'after.json');
+    const store = storeWith(F.household('HH-AUTO-7', 1));
+    const cfg = nsrCfg(mock.base, { autoSend: true });
+    const first = createNsrService({ cfg, records: store, deliveries: createDeliveryStore(before), log: () => {}, send: async () => ({ outcome: 'ACCEPTED', httpStatus: 200, durationMs: 1, ack: null, reason: 'ok', errorCode: null }) });
+    first.queue({ household_serials: ['HH-AUTO-7'], confirm: true }, { operator: 'operator.one' });
+    fs.copyFileSync(before, after); // what a crash right after the 202 leaves behind
+    const saved = Object.values(JSON.parse(fs.readFileSync(after, 'utf8')));
+    assert.deepEqual([saved.length, saved[0].status, saved[0].attempt_count], [1, 'PENDING', 0]);
+    await new Promise((ok) => setImmediate(ok));
+    const second = createNsrService({ cfg, records: store, deliveries: createDeliveryStore(after), log: () => {} });
+    second.recover();
+    assert.equal(await second.tick(), 1);
+    assert.equal(mock.received.length, 1);
+  });
+});
+
 test('docs/api/nsr-field-mapping.md is generated from mapping.json and up to date', () => {
   const { render, OUT } = require('../scripts/build-nsr-mapping-doc.js');
   assert.equal(fs.readFileSync(OUT, 'utf8'), render(), 'run: node scripts/build-nsr-mapping-doc.js');

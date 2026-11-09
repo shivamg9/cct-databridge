@@ -303,3 +303,51 @@ test('leaving a finished transfer without saving does not lose it: Connect on Se
   assert.ok(!u.failed());
   assert.deepEqual(u.errors, []);
 });
+
+test('with the keys entered on the review step, submitting saves and queues the transfer, and Send History records it', { skip }, async () => {
+  const u = boot();
+  const calls = [];
+  const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+  const at = new Date().toISOString();
+  u.w.fetch = async (url, opts) => {
+    calls.push({ url, headers: opts.headers, body: opts.body && JSON.parse(opts.body) });
+    if (url === '/api/v1/records') return reply(201, { status: 'CREATED' });
+    if (url.endsWith('/submit/auto')) return reply(202, { queued_households: 2, deliveries: [{ id: 'dlv-1' }], skipped: [{ household_serial: 'HH-SKIP', codes: ['ALREADY_ACCEPTED'] }] });
+    if (url.endsWith('/config')) return reply(200, { enabled: true, auto_send: true });
+    if (url.endsWith('/households')) return reply(200, { items: [] });
+    if (url.includes('/deliveries')) return reply(200, { items: [{ id: 'dlv-1', status: 'ACCEPTED', origin: 'auto', source: 'Test source', created_by: 'operator.ui', created_at: at, first_attempt_at: at, last_attempt_at: at, record_count: 1, attempt_count: 1, correlation_id: 'ref-123', message_id: 'm-1', households: [{ household_serial: 'HH-A', record_ids: ['REC-A1'] }] }] });
+    return reply(404, { error: { code: 'NOT_FOUND' } });
+  };
+  const type = (sel, v) => { const el = u.$(sel); el.value = v; el.dispatchEvent(new u.w.Event('input', { bubbles: true })); };
+  u.click('[data-act="nav"][data-arg="ingest"]');
+  u.click('[data-act="wiz-source"][data-arg="SRC-LGA-UPLOAD"]');
+  u.click(u.$('[data-act="wiz-sample"]'));
+  await u.until(() => u.$('[data-act="wiz-start"]'));
+  type('#wiz-send-key', 'standard-key-ui');
+  await sleep(150);
+  type('#wiz-send-submit-key', 'submit-key-ui');
+  await sleep(150);
+  type('#wiz-send-operator', 'operator.ui');
+  await sleep(150);
+  const ack = u.$('#wiz-ack');
+  if (ack) { ack.checked = true; ack.dispatchEvent(new u.w.Event('change', { bubbles: true })); }
+  u.click('[data-act="wiz-start"]');
+  await u.until(() => /queued for NSR/.test(u.text()), 30000);
+  const records = calls.filter((c) => c.url === '/api/v1/records');
+  const auto = calls.find((c) => c.url.endsWith('/submit/auto'));
+  assert.ok(records.length > 0 && calls.indexOf(auto) > calls.indexOf(records[records.length - 1]), 'saved first, then queued');
+  assert.equal(records[0].headers['X-API-Key'], 'standard-key-ui');
+  assert.equal(auto.headers['X-API-Key'], 'submit-key-ui');
+  assert.equal(auto.headers['X-Operator-Id'], 'operator.ui');
+  assert.equal(new Set(auto.body.household_serials).size, auto.body.household_serials.length);
+  assert.match(u.text(), /you can close this page/);
+  assert.match(u.text(), /HH-SKIP: Already sent and received by NSR\./, 'skipped households say why');
+  u.click('[data-act="wiz-open-nsr"]');
+  await u.until(() => /Send History/.test(u.text()) && /ref-123/.test(u.text()));
+  assert.match(u.text(), /Automatic/);
+  assert.match(u.text(), /operator\.ui/);
+  assert.match(u.text(), /REC-A1/, 'each record can be traced');
+  u.click('[data-act="nsr-history-csv"]');
+  assert.ok(!u.failed());
+  assert.deepEqual(u.errors, []);
+});

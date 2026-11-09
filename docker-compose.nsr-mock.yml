@@ -29,6 +29,7 @@ services:
       NSR_WEBHOOK_BASE_URL: http://nsr-mock:8090
       NSR_WEBHOOK_INSECURE_TEST_ENDPOINT: "true"     # plain http, mock only
       NSR_WEBHOOK_ALLOW_SYNTHETIC: "true"
+      NSR_WEBHOOK_AUTO_SEND: "true"                  # mock only: submitted transfers go out in the background
       NSR_WEBHOOK_SIGNATURE: local-mock-signature    # not a secret: the mock ignores it
       DATABRIDGE_NSR_SUBMIT_KEY: ${DATABRIDGE_NSR_SUBMIT_KEY:?Set DATABRIDGE_NSR_SUBMIT_KEY in .env (see .env.example)}
       NSR_WEBHOOK_RETRY_BASE_MS: "5000"
