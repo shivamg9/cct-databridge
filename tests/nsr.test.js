@@ -661,6 +661,16 @@ test('a console upload reaches the server store complete, with IDs that survive 
   const sheet = DB.parseCsv(fs.readFileSync(path.join(__dirname, '../docs/samples/nsr-test-households.csv'), 'utf8'));
   const raw = Object.fromEntries(sheet[0].map((name, i) => [name, sheet[1][i]]));
   assert.equal(DB.backendRecord(SCHEMA, { raw, canonical: { nsr_household_serial: 'NSR-HH-TEST-0001' } }).internal_record_id, 'TEST-REC-0001', 'a sheet that carries IDs keeps them, so it matches the CSV loader');
+
+  // Sheets exported with code-list labels instead of codes.
+  const labelled = DB.backendRecord(SCHEMA, { raw: { ...raw, survey_sponsor: 'UNICEF', difficulty_seeing: 'yes,  SOME difficulty', crops_grown: 'Cassava; Cottons',
+    shock_year: '2023', health_insurance_type: 'Through employer  in the public sector (States/LGA)', nutrition_programmes: 'Don’t know', month_left_school: 'March', main_livelihood: 'Moon farming' }, canonical: {} });
+  assert.deepEqual([labelled.survey_sponsor, labelled.difficulty_seeing, labelled.shock_year, labelled.health_insurance_type, labelled.month_left_school], ['1', '2', '1', '3', '3']);
+  assert.deepEqual(labelled.crops_grown, ['3', SCHEMA.codeLists.crop.find((c) => c.label === 'Cottons').code]);
+  assert.deepEqual(labelled.nutrition_programmes, ['4'], 'curly and straight apostrophes match');
+  assert.equal(labelled.main_livelihood, 'Moon farming', 'an unknown label is left for the server to reject');
+  const labelledPush = R.pushRecord(R.createStore(null), { ...first[0], ...labelled, internal_record_id: first[0].internal_record_id, main_livelihood: '1' }, { mode: 'integration' });
+  assert.equal(labelledPush.ok, true, JSON.stringify(labelledPush.errors));
 });
 
 test('automatic send: off by default; queued at once, sent in the background in batches; not-ready households skipped', async () => {
