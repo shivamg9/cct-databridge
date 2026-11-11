@@ -1669,13 +1669,27 @@
   // One processed record as POST /api/v1/records expects it. The upload mapping covers only part of the
   // template, so the source row's named columns fill what it left out (crops, assets, health, ...).
   // The ID never comes from the master sequence: it restarts with each page load and would overwrite other households.
+  // Sheets often hold a code list's labels ("Yes, some difficulty") rather than its codes ("2").
+  // Case, spacing and curly apostrophes are ignored; a value matching neither is sent as is, so the server reports it.
+  const labelKey = (s) => String(s).replace(/[‘’]/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
+  function toCode(list, v) {
+    if (!list) return v;
+    const hit = list.find((c) => c.code === v) || list.find((c) => labelKey(c.label) === labelKey(v));
+    return hit ? hit.code : v;
+  }
+
   function backendRecord(schema, r) {
     const out = {};
     const rawValue = (name) => String((r.raw && r.raw[name]) === undefined || r.raw[name] === null ? '' : r.raw[name]).trim();
     for (const f of schema.fields) {
       const v = f.fill === 'source' ? rawValue(f.name) : '';
       if (!v) continue;
-      if (f.type === 'enumeration (multi)') out[f.name] = v.split(/[;|]/).map((x) => x.trim()).filter(Boolean);
+      // work_subsector's list depends on work_sector; its labels are unique across the labor_* lists, so all are searched.
+      const list = f.codeList && f.codeList.startsWith('labor_*')
+        ? Object.keys(schema.codeLists).filter((k) => k.startsWith('labor_') && k !== 'labor_category').flatMap((k) => schema.codeLists[k])
+        : f.codeList && schema.codeLists[f.codeList];
+      if (f.type === 'enumeration (multi)') out[f.name] = v.split(/[;|]/).map((x) => toCode(list, x.trim())).filter(Boolean);
+      else if (f.type === 'enumeration') out[f.name] = toCode(list, v);
       else if (f.type.startsWith('integer') || f.type.startsWith('decimal')) out[f.name] = Number.isNaN(Number(v)) ? v : Number(v); // a bad number stays text, so the server rejects it
       else out[f.name] = v;
     }
