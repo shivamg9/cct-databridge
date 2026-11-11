@@ -21,8 +21,8 @@ const SECTIONS = {
   household_members: '8. Household members roster (per member)',
 };
 const TRANSFORMS = {
-  copy: 'none', code: 'code sent unchanged', yes_no: 'true/false -> YES/NO', code_map: 'code -> NSR value', code_label: 'code -> year',
-  multi_codes: 'list -> space-separated codes', count_flag: 'count > 0 -> YES, 0 -> NO', count_num: 'count -> string', assets_any: 'any asset count > 0',
+  copy: 'none', code: 'code sent unchanged', yes_no: 'true/false -> YES/NO', code_map: 'code -> NSR value', code_label: 'code -> Code Lists label',
+  multi_codes: 'list -> space-separated codes', multi_labels: 'list -> Code Lists labels, comma-separated', subsector_label: 'label, only under the sector\'s key', count_flag: 'count > 0 -> YES, 0 -> NO', count_num: 'count -> string', assets_any: 'any asset count > 0',
   crops_any: 'any crop answer present', crop_flag: 'crop code in crops_grown', other_crop_flag: 'other crop text present', birth_year: 'year of birth_date',
   birth_month: 'month of birth_date', birth_day: 'day of birth_date', age: 'completed years at message time', subsector: 'only under the sector\'s key',
   social_any: 'any group membership true', gps_components: 'sent as latitude, longitude, accuracy_m', none: 'not sent',

@@ -1684,7 +1684,10 @@
     for (const f of schema.fields) {
       const v = f.fill === 'source' ? rawValue(f.name) : '';
       if (!v) continue;
-      const list = f.codeList && schema.codeLists[f.codeList];
+      // work_subsector's list depends on work_sector; its labels are unique across the labor_* lists, so all are searched.
+      const list = f.codeList && f.codeList.startsWith('labor_*')
+        ? Object.keys(schema.codeLists).filter((k) => k.startsWith('labor_') && k !== 'labor_category').flatMap((k) => schema.codeLists[k])
+        : f.codeList && schema.codeLists[f.codeList];
       if (f.type === 'enumeration (multi)') out[f.name] = v.split(/[;|]/).map((x) => toCode(list, x.trim())).filter(Boolean);
       else if (f.type === 'enumeration') out[f.name] = toCode(list, v);
       else if (f.type.startsWith('integer') || f.type.startsWith('decimal')) out[f.name] = Number.isNaN(Number(v)) ? v : Number(v); // a bad number stays text, so the server rejects it

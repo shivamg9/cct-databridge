@@ -252,11 +252,11 @@
         "roof_material"
       ],
       "source": "roof_material",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": "1",
       "classification": "ALIAS",
-      "notes": "Build-sheet roof code; the spec default \"1\" suggests codes are accepted."
+      "notes": "Build-sheet roof label (Code Lists tab). The spec default \"1\" is a code, but NSR shows the value as received."
     },
     {
       "section": "dwelling_and_services",
@@ -266,11 +266,11 @@
         "floor_material"
       ],
       "source": "floor_material",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: CEMENT, EARTH_SAND, TILES."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team. Spec examples: CEMENT, EARTH_SAND, TILES."
     },
     {
       "section": "dwelling_and_services",
@@ -294,11 +294,11 @@
         "water_source"
       ],
       "source": "drinking_water_source",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: TUBEWELL_BOREHOLE, PIPED_WATER."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team. Spec examples: TUBEWELL_BOREHOLE, PIPED_WATER."
     },
     {
       "section": "dwelling_and_services",
@@ -308,11 +308,11 @@
         "sanitation_type"
       ],
       "source": "toilet_type",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: FLUSH_TOILET, PIT_LATRINE."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team. Spec examples: FLUSH_TOILET, PIT_LATRINE."
     },
     {
       "section": "dwelling_and_services",
@@ -321,11 +321,11 @@
         "devicetype_dwelling"
       ],
       "source": "toilet_device_type",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "dwelling_and_services",
@@ -335,11 +335,11 @@
         "lighting_source"
       ],
       "source": "lighting_source",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: ELECTRICITY, SOLAR, KEROSENE."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team. Spec examples: ELECTRICITY, SOLAR, KEROSENE."
     },
     {
       "section": "dwelling_and_services",
@@ -349,11 +349,11 @@
         "cooking_fuel"
       ],
       "source": "cooking_fuel",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: FIREWOOD, LPG_GAS, KEROSENE, CHARCOAL."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team. Spec examples: FIREWOOD, LPG_GAS, KEROSENE, CHARCOAL."
     },
     {
       "section": "vulnerability_shocks_and_coping",
@@ -363,11 +363,11 @@
         "primary_livelihood"
       ],
       "source": "main_livelihood",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec examples: CROP_FARMING, LIVESTOCK, TRADING."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team. Spec examples: CROP_FARMING, LIVESTOCK, TRADING."
     },
     {
       "section": "vulnerability_shocks_and_coping",
@@ -402,11 +402,11 @@
         "shock_type"
       ],
       "source": "shock_types",
-      "transform": "multi_codes",
+      "transform": "multi_labels",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "Multi-select format is not documented; sent as space-separated build-sheet codes (ODK select_multiple convention). Confirm with the NSR team."
+      "notes": "Multi-select format is not documented; sent as build-sheet labels (Code Lists tab) separated by \", \". Confirm with the NSR team."
     },
     {
       "section": "vulnerability_shocks_and_coping",
@@ -441,11 +441,11 @@
         "mechanism_type"
       ],
       "source": "coping_mechanisms",
-      "transform": "multi_codes",
+      "transform": "multi_labels",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "Multi-select format is not documented; sent as space-separated build-sheet codes (ODK select_multiple convention). Confirm with the NSR team."
+      "notes": "Multi-select format is not documented; sent as build-sheet labels (Code Lists tab) separated by \", \". Confirm with the NSR team."
     },
     {
       "section": "vulnerability_shocks_and_coping",
@@ -497,11 +497,11 @@
         "health_insurance_type"
       ],
       "source": "health_insurance_type",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_health_insurance",
@@ -2056,11 +2056,11 @@
         "bank_name"
       ],
       "source": "bank_name",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec example: ACCESS_BANK."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team. Spec example: ACCESS_BANK."
     },
     {
       "section": "household_members",
@@ -2149,11 +2149,11 @@
         "b5labour"
       ],
       "source": "employment_status",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2162,11 +2162,11 @@
         "b6labour"
       ],
       "source": "work_sector",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2175,11 +2175,11 @@
         "agriculture"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 1.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 1.",
       "sector_code": "1"
     },
     {
@@ -2189,11 +2189,11 @@
         "mining"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 2.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 2.",
       "sector_code": "2"
     },
     {
@@ -2203,11 +2203,11 @@
         "manufacturing"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 3.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 3.",
       "sector_code": "3"
     },
     {
@@ -2217,11 +2217,11 @@
         "electricity"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 4.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 4.",
       "sector_code": "4"
     },
     {
@@ -2231,11 +2231,11 @@
         "water"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 5.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 5.",
       "sector_code": "5"
     },
     {
@@ -2245,11 +2245,11 @@
         "construction"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 6.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 6.",
       "sector_code": "6"
     },
     {
@@ -2259,11 +2259,11 @@
         "wholesale"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 7.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 7.",
       "sector_code": "7"
     },
     {
@@ -2273,11 +2273,11 @@
         "transportation"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 8.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 8.",
       "sector_code": "8"
     },
     {
@@ -2287,11 +2287,11 @@
         "accommodation"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 9.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 9.",
       "sector_code": "9"
     },
     {
@@ -2301,11 +2301,11 @@
         "information"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 10.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 10.",
       "sector_code": "10"
     },
     {
@@ -2315,11 +2315,11 @@
         "financial"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 11.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 11.",
       "sector_code": "11"
     },
     {
@@ -2329,11 +2329,11 @@
         "real"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 12.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 12.",
       "sector_code": "12"
     },
     {
@@ -2343,11 +2343,11 @@
         "professional"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 13.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 13.",
       "sector_code": "13"
     },
     {
@@ -2357,11 +2357,11 @@
         "administrative"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 14.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 14.",
       "sector_code": "14"
     },
     {
@@ -2371,11 +2371,11 @@
         "public"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 15.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 15.",
       "sector_code": "15"
     },
     {
@@ -2385,11 +2385,11 @@
         "education"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 16.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 16.",
       "sector_code": "16"
     },
     {
@@ -2399,11 +2399,11 @@
         "human"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 17.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 17.",
       "sector_code": "17"
     },
     {
@@ -2413,11 +2413,11 @@
         "arts"
       ],
       "source": "work_subsector",
-      "transform": "subsector",
+      "transform": "subsector_label",
       "type": "string",
       "spec_default": null,
       "classification": "TRANSFORMED",
-      "notes": "work_subsector code, sent under this key only when work_sector = 18.",
+      "notes": "work_subsector label (Code Lists tab), sent under this key only when work_sector = 18.",
       "sector_code": "18"
     },
     {
@@ -2440,11 +2440,11 @@
         "educationalqualification"
       ],
       "source": "educational_qualification",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team. Spec example: SECONDARY."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team. Spec example: SECONDARY."
     },
     {
       "section": "household_members",
@@ -2466,11 +2466,11 @@
         "grade"
       ],
       "source": "current_grade",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2479,11 +2479,11 @@
         "outofschoolgrade"
       ],
       "source": "last_grade_completed",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2492,11 +2492,11 @@
         "monthstopschool"
       ],
       "source": "month_left_school",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2505,11 +2505,11 @@
         "yearstopschool"
       ],
       "source": "year_left_school",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2518,11 +2518,11 @@
         "howfarisschoolenrolled"
       ],
       "source": "school_travel_time",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2570,11 +2570,11 @@
         "howfarishealthcentre"
       ],
       "source": "health_centre_travel_time",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2596,11 +2596,11 @@
         "food_nutrition"
       ],
       "source": "nutrition_programmes",
-      "transform": "multi_codes",
+      "transform": "multi_labels",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "Multi-select format is not documented; sent as space-separated build-sheet codes (ODK select_multiple convention). Confirm with the NSR team."
+      "notes": "Multi-select format is not documented; sent as build-sheet labels (Code Lists tab) separated by \", \". Confirm with the NSR team."
     },
     {
       "section": "household_members",
@@ -2635,11 +2635,11 @@
         "seeing"
       ],
       "source": "difficulty_seeing",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2648,11 +2648,11 @@
         "hearing"
       ],
       "source": "difficulty_hearing",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2661,11 +2661,11 @@
         "walking"
       ],
       "source": "difficulty_walking",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2674,11 +2674,11 @@
         "remembering"
       ],
       "source": "difficulty_remembering",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2687,11 +2687,11 @@
         "selfcare"
       ],
       "source": "difficulty_self_care",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2700,11 +2700,11 @@
         "communication"
       ],
       "source": "difficulty_communicating",
-      "transform": "code",
+      "transform": "code_label",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends its build-sheet code unchanged. Confirm the expected values with the NSR team."
+      "notes": "NSR option values for this field are not documented in the specification; DataBridge sends the build-sheet label (Code Lists tab). Confirm the expected values with the NSR team."
     },
     {
       "section": "household_members",
@@ -2726,11 +2726,11 @@
         "chronicallyilltype"
       ],
       "source": "chronic_illness_types",
-      "transform": "multi_codes",
+      "transform": "multi_labels",
       "type": "string",
       "spec_default": null,
       "classification": "REVIEW_REQUIRED",
-      "notes": "Multi-select format is not documented; sent as space-separated build-sheet codes (ODK select_multiple convention). Confirm with the NSR team."
+      "notes": "Multi-select format is not documented; sent as build-sheet labels (Code Lists tab) separated by \", \". Confirm with the NSR team."
     },
     {
       "section": "household_members",

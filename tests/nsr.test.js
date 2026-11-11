@@ -116,6 +116,10 @@ test('a full household maps every section with documented values, nothing invent
   const h = built(store, 'HH-FULL-0001');
   assert.equal(h.status, 'READY', JSON.stringify(h.errors));
   const m = h.message;
+  // Code-list fields are sent as their Code Lists labels.
+  const listOf = (field) => SCHEMA.fields.find((f) => f.name === field).codeList;
+  const inList = (list, ...codes) => codes.map((c) => SCHEMA.codeLists[list].find((x) => x.code === c).label).join(', ');
+  const label = (field, ...codes) => inList(listOf(field), ...codes);
   // Section 1
   assert.deepEqual([m.sponsor, m.other_sponsor, m.consent, m.enumerator, m.community, m.individual_sn, m.hhaddress], ['OTHER', 'Community trust', 'YES', 'ENUM-OYO-01', 'Ward 9 Community', 'HH-FULL-0001', '72 Market Road']);
   assert.ok(!('unlisted_enum' in m) && !('coordinate_source' in m), 'never sent');
@@ -124,13 +128,16 @@ test('a full household maps every section with documented values, nothing invent
   // Section 2
   assert.equal(m.total_heads, 2);
   assert.ok(!('disroster' in m));
-  // Section 3: codes passed through unchanged (vocabulary unconfirmed)
-  assert.deepEqual([m.roof_dwelling, m.floor_dwelling, m.num_room, m.drink_dwelling, m.toilet_dwelling, m.devicetype_dwelling, m.light_dwelling, m.cook_dwelling], ['1', '4', 4, '4', '7', '1', '5', '1']);
+  // Section 3
+  assert.deepEqual([m.roof_dwelling, m.floor_dwelling, m.num_room, m.drink_dwelling, m.toilet_dwelling, m.devicetype_dwelling, m.light_dwelling, m.cook_dwelling],
+    [label('roof_material', '1'), label('floor_material', '4'), 4, label('drinking_water_source', '4'), label('toilet_type', '7'), label('toilet_device_type', '1'), label('lighting_source', '5'), label('cooking_fuel', '1')]);
+  assert.equal(m.floor_dwelling, 'Concrete');
   // Section 4
   assert.deepEqual([m.livelihoods, m.other_specify_livelihoods, m.anyshocks, m.shock_type, m.other_specify_shock, m.shock_year, m.mechanism_type, m.other_specify_mechanism, m.mechanism_year],
-    ['1', 'Petty trading', 'YES', '1 2', 'Pest attack', '2024', '1 6', 'Borrowed seed', '2025']);
+    [label('main_livelihood', '1'), 'Petty trading', 'YES', label('shock_types', '1', '2'), 'Pest attack', '2024', label('coping_mechanisms', '1', '6'), 'Borrowed seed', '2025']);
+  assert.equal(m.shock_type, 'Flood, Drought');
   // Section 5
-  assert.deepEqual([m.health_insurance, m.health_insurance_type, m.otherhealth_insurance_type], ['YES', '2', 'Mutual aid']);
+  assert.deepEqual([m.health_insurance, m.health_insurance_type, m.otherhealth_insurance_type], ['YES', label('health_insurance_type', '2'), 'Mutual aid']);
   // Section 6: every asset flag and quantity
   F.ASSETS.forEach((a, i) => {
     const e = MAPPING.household.find((x) => x.source === `asset_${a}` && x.transform === 'count_flag');
@@ -149,12 +156,13 @@ test('a full household maps every section with documented values, nothing invent
     ['Eze', 'Chinedu', 'Ade', 'HEAD', 'MALE', 1990, 11, 25, 35, 'MARRIED', 'YES']);
   assert.deepEqual([head.validnin, head.validnintype, head.nin, head.ninsurname, head.ninfirstname, head.ninothername, head.contactno], ['YES', 'NIN', 'HH-FULL-0001'.replace(/\D/g, '') && head.nin, 'Eze', 'Chinedu', 'Ade', '+2348010038295']);
   assert.match(head.nin, /^99\d{9}$/);
-  assert.deepEqual([head.bank_name, head.other_bank_name, head.accountname, head.accountno, head.bvn], ['8', 'Microfinance', 'Chinedu Eze', '2000017595', '22000013455']);
-  assert.deepEqual([head.b5labour, head.b6labour, head.agriculture, head.mining, head.b6_other], ['4', '1', '5', undefined, 'Seasonal'], 'subsector only under its sector key');
-  assert.deepEqual([head.educationalqualification, head.currentlyenrolledinschl, head.outofschoolgrade, head.monthstopschool, head.yearstopschool, head.howfarisschoolenrolled], ['5', 'NO', '12', '6', '2019', '1']);
-  assert.deepEqual([head.benefitfromhealthcare, head.howfarishealthcentre, head.muac, head.food_nutrition], ['YES', '2', 24.5, '2 3']);
+  assert.deepEqual([head.bank_name, head.other_bank_name, head.accountname, head.accountno, head.bvn], [label('bank_name', '8'), 'Microfinance', 'Chinedu Eze', '2000017595', '22000013455']);
+  assert.deepEqual([head.b5labour, head.b6labour, head.agriculture, head.mining, head.b6_other], [label('employment_status', '4'), label('work_sector', '1'), inList('labor_agriculture', '5'), undefined, 'Seasonal'], 'subsector only under its sector key');
+  assert.deepEqual([head.educationalqualification, head.currentlyenrolledinschl, head.outofschoolgrade, head.monthstopschool, head.yearstopschool, head.howfarisschoolenrolled], [label('educational_qualification', '5'), 'NO', label('last_grade_completed', '12'), label('month_left_school', '6'), '2019', label('school_travel_time', '1')]);
+  assert.deepEqual([head.benefitfromhealthcare, head.howfarishealthcentre, head.muac, head.food_nutrition], ['YES', label('health_centre_travel_time', '2'), 24.5, label('nutrition_programmes', '2', '3')]);
   assert.deepEqual([head.disability, head.seeing, head.hearing, head.walking, head.remembering, head.selfcare, head.communication, head.chronicallyill, head.chronicallyilltype, head.otherchronicallyilltype],
-    ['YES', '2', '1', '3', '1', '1', '4', 'YES', '2 8', 'Asthma']);
+    ['YES', ...['2', '1', '3', '1', '1', '4'].map((c) => label('difficulty_seeing', c)), 'YES', label('chronic_illness_types', '2', '8'), 'Asthma']);
+  assert.equal(head.seeing, 'Yes, some difficulty');
   assert.deepEqual([head.socialnetwork_label, head.cooperative, head.religiousgroup, head.businessgroup, head.agegroup, head.other_social_group, head.othergroup], ['YES', 'YES', 'NO', 'NO', 'YES', 'YES', 'Farmers union']);
   for (const k of ['connin', 'contrackid', 'confrim_contactno', 'caccountno', 'cbvn', 'health_problem_label']) assert.ok(!(k in head), `${k} is not invented`);
   const member = m.household_members[1];
@@ -669,6 +677,8 @@ test('a console upload reaches the server store complete, with IDs that survive 
   assert.deepEqual(labelled.crops_grown, ['3', SCHEMA.codeLists.crop.find((c) => c.label === 'Cottons').code]);
   assert.deepEqual(labelled.nutrition_programmes, ['4'], 'curly and straight apostrophes match');
   assert.equal(labelled.main_livelihood, 'Moon farming', 'an unknown label is left for the server to reject');
+  const sub = DB.backendRecord(SCHEMA, { raw: { ...raw, work_sector: 'Manufacturing', work_subsector: 'Manufacture of prepared animal feeds' }, canonical: {} });
+  assert.deepEqual([sub.work_sector, sub.work_subsector], ['3', SCHEMA.codeLists.labor_manufacturing.find((c) => c.label === 'Manufacture of prepared animal feeds').code], 'the subsector label is found in its sector list');
   const labelledPush = R.pushRecord(R.createStore(null), { ...first[0], ...labelled, internal_record_id: first[0].internal_record_id, main_livelihood: '1' }, { mode: 'integration' });
   assert.equal(labelledPush.ok, true, JSON.stringify(labelledPush.errors));
 });

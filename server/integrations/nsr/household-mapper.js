@@ -27,6 +27,13 @@ function ageAt(birth, now) {
   return age >= 0 ? age : undefined;
 }
 
+// The Code Lists label for a stored code. A code with no label is reported and not sent.
+function labelOf(list, code, entry, ctx) {
+  const c = (SCHEMA.codeLists[list] || []).find((x) => x.code === String(code));
+  if (!c) ctx.warn('VALUE_NOT_SENT', entry.target, `code ${code} has no label in code list ${list} and is not sent`);
+  return c ? c.label : undefined;
+}
+
 // Returns the value to send for one mapping entry, or undefined to leave the key out.
 function valueFor(entry, rec, ctx) {
   const v = entry.source && !entry.source.includes('*') ? rec[entry.source] : undefined;
@@ -45,10 +52,11 @@ function valueFor(entry, rec, ctx) {
       ctx.warn('VALUE_NOT_SENT', entry.target, `code ${v} has no NSR equivalent and is not sent`);
       return undefined;
     }
-    case 'code_label': {
+    case 'code_label': return has(v) ? labelOf(FIELDS.get(entry.source).codeList, v, entry, ctx) : undefined;
+    case 'multi_labels': {
       if (!has(v)) return undefined;
-      const c = (SCHEMA.codeLists[FIELDS.get(entry.source).codeList] || []).find((x) => x.code === String(v));
-      return c ? c.label : undefined;
+      const labels = v.map((x) => labelOf(FIELDS.get(entry.source).codeList, x, entry, ctx)).filter(has);
+      return labels.length ? labels.join(', ') : undefined;
     }
     case 'multi_codes': return has(v) ? v.map(String).join(' ') : undefined;
     case 'count_flag': return Number.isInteger(v) ? (v > 0 ? 'YES' : 'NO') : undefined;
@@ -62,6 +70,7 @@ function valueFor(entry, rec, ctx) {
     case 'birth_day': return has(v) ? Number(v.slice(8, 10)) : undefined;
     case 'age': return has(v) ? ageAt(v, ctx.now) : undefined;
     case 'subsector': return has(v) && String(rec.work_sector) === entry.sector_code ? String(v) : undefined;
+    case 'subsector_label': return has(v) && String(rec.work_sector) === entry.sector_code ? labelOf(`labor_${entry.target}`, v, entry, ctx) : undefined;
     case 'social_any': return anyOf(rec, SOCIAL_FIELDS, (b) => b === true);
     case 'gps_components': return undefined; // handled in buildHousehold: three keys, not one
     default: throw new Error(`Unknown transform ${entry.transform} for ${entry.target}`);
