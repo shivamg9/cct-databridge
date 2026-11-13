@@ -157,3 +157,66 @@ test('every engine run status maps to one of four operator statuses, never wrong
   for (const s of ['NEEDS_RECONCILIATION', 'REPLICA_FAILED', 'NEEDS_REVIEW', 'COMPLETED_WITH_ERRORS']) assert.equal(T.simpleStatus(s).label, 'Needs Attention');
   assert.equal(T.simpleStatus('SOMETHING_NEW').label, 'Needs Attention', 'unknown states fail safe');
 });
+
+test('pager: 8 rows a page, page count and bounds', () => {
+  assert.equal(T.PAGE_SIZE, 8);
+  assert.deepEqual(T.paginate(83, 1), { page: 1, pages: 11, total: 83, from: 0, to: 8, size: 8 });
+  assert.equal(T.pageLabel(T.paginate(83, 1)), 'Showing 1-8 of 83');
+  assert.equal(T.pageLabel(T.paginate(83, 11)), 'Showing 81-83 of 83', 'the last page holds the remainder');
+  assert.equal(T.paginate(8, 1).pages, 1, 'exactly one page: the pager is hidden');
+  assert.equal(T.paginate(9, 1).pages, 2);
+  assert.equal(T.paginate(0, 1).pages, 1);
+  assert.equal(T.paginate(0, 1).to, 0);
+  assert.equal(T.paginate(83, 99).page, 11, 'past the end clamps to the last page');
+  assert.equal(T.paginate(83, 0).page, 1, 'before the start clamps to page 1');
+  assert.equal(T.paginate(83, -3).page, 1);
+  assert.equal(T.paginate(83, 'x').page, 1);
+  assert.equal(T.paginate(83, Infinity).page, 11);
+});
+
+test('pager: numbers with ... for long ranges', () => {
+  assert.deepEqual(T.pageItems(1, 5), [1, 2, 3, 4, 5]);
+  assert.deepEqual(T.pageItems(1, 7), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(T.pageItems(1, 11), [1, 2, 3, 4, 5, '...', 11]);
+  assert.deepEqual(T.pageItems(6, 11), [1, '...', 5, 6, 7, '...', 11]);
+  assert.deepEqual(T.pageItems(11, 11), [1, '...', 7, 8, 9, 10, 11]);
+  for (let pages = 1; pages <= 30; pages++) {
+    for (let p = 1; p <= pages; p++) {
+      const items = T.pageItems(p, pages);
+      assert.ok(items.includes(p), `page ${p} of ${pages} is listed`);
+      assert.equal(items[0], 1);
+      assert.equal(items[items.length - 1], pages);
+      assert.ok(items.length <= 7, `at most 7 buttons (${pages} pages)`);
+    }
+  }
+});
+
+test('pager: each list keeps its page, and a filter change returns it to page 1', () => {
+  const store = {};
+  assert.equal(T.pageState(store, 'runs', 83, '""').page, 1);
+  store.runs.page = 4;
+  assert.equal(T.pageState(store, 'runs', 83, '""').page, 4, 'same filter keeps the page');
+  assert.equal(T.pageState(store, 'audit', 83, '""').page, 1, 'other lists are independent');
+  assert.equal(T.pageState(store, 'runs', 30, '"Failed"').page, 1, 'a new filter starts again at page 1');
+  store.runs.page = 4;
+  assert.equal(T.pageState(store, 'runs', 10, '"Failed"').page, 2, 'a list that shrank clamps to its last page');
+  assert.equal(store.runs.page, 2);
+});
+
+test('wording: NSR reads as NSIPA Registry and "by hand" as "manually", codes and IDs unchanged', () => {
+  assert.equal(T.brand('Send to NSR'), 'Send to NSIPA Registry');
+  assert.equal(T.brand('Send it again by hand'), 'Send it again manually');
+  assert.equal(T.brand('Send households to the NSR Household Register'), 'Send households to the NSIPA Registry');
+  assert.equal(T.brand('NSR household serial no.'), 'NSIPA Registry household serial no.');
+  for (const keep of ['NSR_WEBHOOK_ENABLED', 'SRC-NSR-NASSCO', 'NSR-HH-0001', '/api/v1/nsr/submit', 'nsr.preview', 'nsr_household_serial']) assert.equal(T.brand(keep), keep);
+  assert.equal(T.scrub('not sent; NSR will record "NO"'), 'not sent; NSIPA Registry will record "NO"');
+  for (const v of Object.values(T.PERM_LABELS)) assert.doesNotMatch(v, /\bNSR\b/);
+});
+
+test('roles: three labels, and only Platform Admin sees Settings', () => {
+  assert.deepEqual(Object.keys(T.ROLE_LABELS).sort(), ['INGESTION_OPERATOR', 'PLATFORM_ADMIN', 'READ_ONLY']);
+  assert.equal(T.ROLE_LABELS.PLATFORM_ADMIN, 'Platform Admin');
+  assert.equal(T.ROLE_LABELS.INGESTION_OPERATOR, 'Operator');
+  assert.equal(T.ROLE_LABELS.READ_ONLY, 'Read-only');
+  assert.deepEqual(T.SETTINGS_ROLES, ['PLATFORM_ADMIN']);
+});

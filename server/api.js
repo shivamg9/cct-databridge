@@ -192,7 +192,7 @@ function createServer(opts) {
     };
     if (route.need === 'submit') {
       if (!nsrCfg.enabled) return fail(res, 503, 'NSR_WEBHOOK_DISABLED', 'The NSR webhook is disabled (NSR_WEBHOOK_ENABLED=false). Nothing was sent.');
-      if (level !== 'operator') return fail(res, 403, 'NSR_SUBMIT_FORBIDDEN', 'Submitting to NSR needs the NSR submit key (DATABRIDGE_NSR_SUBMIT_KEY)');
+      if (level !== 'operator') return fail(res, 403, 'NSR_SUBMIT_FORBIDDEN', 'Submitting to NSIPA Registry needs the NSIPA Registry submit key (DATABRIDGE_NSR_SUBMIT_KEY)');
       ctx.operator = String(req.headers['x-operator-id'] || '').trim();
       if (!OPERATOR_ID.test(ctx.operator)) return fail(res, 400, 'OPERATOR_REQUIRED', 'Send X-Operator-Id (3-64 characters: letters, digits, space, . _ @ -) to say who is acting');
       const key = req.headers['idempotency-key'];

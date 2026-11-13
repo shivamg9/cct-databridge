@@ -93,7 +93,7 @@ function createNsrService({ cfg, records, deliveries, log, now, send }) {
 
   // ---- submit -----------------------------------------------------------------------
   async function submit(body, { single, operator, idempotencyKey }) {
-    if (!cfg.enabled) throw new NsrError(503, 'NSR_WEBHOOK_DISABLED', 'The NSR webhook is disabled (NSR_WEBHOOK_ENABLED=false). Nothing was sent.');
+    if (!cfg.enabled) throw new NsrError(503, 'NSR_WEBHOOK_DISABLED', 'The NSIPA Registry webhook is disabled (NSR_WEBHOOK_ENABLED=false). Nothing was sent.');
     if (!body || body.confirm !== true) throw new NsrError(400, 'CONFIRMATION_REQUIRED', 'Preview first, then send "confirm": true to submit');
     const serials = single ? serialsFrom(body, true) : serialsFrom(body, false);
     const format = single ? 'single' : formatFrom(body, serials.length);
@@ -112,7 +112,7 @@ function createNsrService({ cfg, records, deliveries, log, now, send }) {
       throw new NsrError(422, 'VALIDATION_FAILED', 'One or more households cannot be sent; nothing was sent', invalid.map((h) => ({ household_serial: h.household_serial, errors: h.errors })));
     }
     const clashes = built.map((h) => clashFor(h, body.resubmit === true)).filter(Boolean);
-    if (clashes.length) throw new NsrError(409, 'DUPLICATE_SUBMISSION', 'Already sent or being sent; nothing was sent. A changed household that NSR already accepted needs "resubmit": true.', clashes);
+    if (clashes.length) throw new NsrError(409, 'DUPLICATE_SUBMISSION', 'Already sent or being sent; nothing was sent. A changed household that NSIPA Registry already accepted needs "resubmit": true.', clashes);
 
     const d = newDelivery(built, format, { operator, idempotencyKey, resubmit: body.resubmit === true, origin: 'manual' });
     const bytes = Buffer.byteLength(JSON.stringify(envelopeFor(d)));
@@ -168,7 +168,7 @@ function createNsrService({ cfg, records, deliveries, log, now, send }) {
   // stop them, and a restart picks them up. Anything not ready is skipped and reported. An accepted household
   // is never resent here, even if it changed: that stays an operator's decision.
   function queue(body, { operator }) {
-    if (!cfg.enabled) throw new NsrError(503, 'NSR_WEBHOOK_DISABLED', 'The NSR webhook is disabled (NSR_WEBHOOK_ENABLED=false). Nothing was sent.');
+    if (!cfg.enabled) throw new NsrError(503, 'NSR_WEBHOOK_DISABLED', 'The NSIPA Registry webhook is disabled (NSR_WEBHOOK_ENABLED=false). Nothing was sent.');
     if (!cfg.autoSend) throw new NsrError(503, 'NSR_AUTO_SEND_DISABLED', 'Automatic sending is off (NSR_WEBHOOK_AUTO_SEND=false). Nothing was queued.');
     if (!body || body.confirm !== true) throw new NsrError(400, 'CONFIRMATION_REQUIRED', 'Send "confirm": true to queue households');
     const list = body.household_serials;
@@ -250,11 +250,11 @@ function createNsrService({ cfg, records, deliveries, log, now, send }) {
   }
 
   async function retry(id, body, operator) {
-    if (!cfg.enabled) throw new NsrError(503, 'NSR_WEBHOOK_DISABLED', 'The NSR webhook is disabled. Nothing was sent.');
+    if (!cfg.enabled) throw new NsrError(503, 'NSR_WEBHOOK_DISABLED', 'The NSIPA Registry webhook is disabled. Nothing was sent.');
     const d = get(id);
     if (inFlight.has(id)) throw new NsrError(409, 'IN_FLIGHT', 'This delivery is being sent right now');
     if (d.status === 'CONFIRMATION_PENDING' && !(body && body.confirm_not_received === true)) {
-      throw new NsrError(409, 'CONFIRMATION_REQUIRED', 'The outcome is uncertain. Check NSR first: if the household is there, reconcile as ACCEPTED; if not, retry with "confirm_not_received": true');
+      throw new NsrError(409, 'CONFIRMATION_REQUIRED', 'The outcome is uncertain. Check NSIPA Registry first: if the household is there, reconcile as ACCEPTED; if not, retry with "confirm_not_received": true');
     }
     if (!['RETRY_SCHEDULED', 'DELIVERY_FAILED', 'CONFIRMATION_PENDING'].includes(d.status)) throw new NsrError(409, 'NOT_RETRYABLE', `A ${d.status} delivery cannot be retried`);
     d.retry_budget_from = d.attempt_count;

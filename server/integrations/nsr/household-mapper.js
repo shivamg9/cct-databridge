@@ -48,8 +48,8 @@ function valueFor(entry, rec, ctx) {
       if (out !== undefined) {
         return out;
       }
-      if (entry.fallback) { ctx.warn('VALUE_GENERALISED', entry.target, `code ${v} has no NSR equivalent and is sent as ${entry.fallback}`); return entry.fallback; }
-      ctx.warn('VALUE_NOT_SENT', entry.target, `code ${v} has no NSR equivalent and is not sent`);
+      if (entry.fallback) { ctx.warn('VALUE_GENERALISED', entry.target, `code ${v} has no NSIPA Registry equivalent and is sent as ${entry.fallback}`); return entry.fallback; }
+      ctx.warn('VALUE_NOT_SENT', entry.target, `code ${v} has no NSIPA Registry equivalent and is not sent`);
       return undefined;
     }
     case 'code_label': return has(v) ? labelOf(FIELDS.get(entry.source).codeList, v, entry, ctx) : undefined;
@@ -124,7 +124,7 @@ function buildHousehold(serial, records, opts) {
   const synth = new Set(records.map((r) => r.synthetic));
   if (synth.size > 1) err('MIXED_SYNTHETIC', 'synthetic', 'The household mixes synthetic and real records');
   const synthetic = synth.size === 1 ? [...synth][0] : null;
-  if (synthetic === true && opts.allowSynthetic === false) err('SYNTHETIC_NOT_ALLOWED', 'synthetic', 'Synthetic records cannot be sent to NSR unless NSR_WEBHOOK_ALLOW_SYNTHETIC=true');
+  if (synthetic === true && opts.allowSynthetic === false) err('SYNTHETIC_NOT_ALLOWED', 'synthetic', 'Synthetic records cannot be sent to NSIPA Registry unless NSR_WEBHOOK_ALLOW_SYNTHETIC=true');
 
   // Household-level fields: one value per household. Different values across members block the household.
   const hh = {};
@@ -158,12 +158,12 @@ function buildHousehold(serial, records, opts) {
   for (const e of MAPPING.household) {
     if (e.spec_default === null || e.spec_default === '' || e.section === 'household_crops_grown' || e.target === 'consent') continue;
     const key = e.transform === 'gps_components' ? 'latitude' : e.target;
-    if (!(key in message)) ctx.warn('NSR_DEFAULT_APPLIES', e.target, `not sent; NSR will record ${JSON.stringify(e.spec_default)}`);
+    if (!(key in message)) ctx.warn('NSR_DEFAULT_APPLIES', e.target, `not sent; NSIPA Registry will record ${JSON.stringify(e.spec_default)}`);
   }
-  if (!('hh_crops_options' in message)) ctx.warn('NSR_DEFAULT_APPLIES', 'household_crops_grown', 'no crop data; NSR will record "NO" for every crop');
+  if (!('hh_crops_options' in message)) ctx.warn('NSR_DEFAULT_APPLIES', 'household_crops_grown', 'no crop data; NSIPA Registry will record "NO" for every crop');
   const review = [...MAPPING.household, ...MAPPING.members].filter((e) => e.classification === 'REVIEW_REQUIRED' && e.transform !== 'none')
     .map((e) => e.target).filter((t) => t in message || message.household_members.some((m) => t in m));
-  if (review.length) ctx.warn('VALUE_FORMAT_UNCONFIRMED', null, `sent in a format the NSR team has not confirmed: ${review.join(', ')}`);
+  if (review.length) ctx.warn('VALUE_FORMAT_UNCONFIRMED', null, `sent in a format the NSIPA Registry team has not confirmed: ${review.join(', ')}`);
 
   return {
     ...base,

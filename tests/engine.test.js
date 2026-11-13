@@ -248,10 +248,36 @@ test('RBAC: read-only viewer cannot start runs; denial is audited', () => {
   assert.ok(e.state.audit.some((a) => a.action === 'AUTHZ_DENIED'));
   e.setRole('PLATFORM_ADMIN');
   const run = runScenario(e, 'S01');
+  e.setRole('INGESTION_OPERATOR');
   assert.throws(() => e.viewRawPayload(run.records[0].id, 'checking a complaint'), /payload.view/);
-  e.setRole('DATA_QUALITY_ANALYST');
+  e.setRole('PLATFORM_ADMIN');
   assert.throws(() => e.viewRawPayload(run.records[0].id, 'short'), /justification/);
   assert.ok(e.viewRawPayload(run.records[0].id, 'Investigating ticket DQ-1042'));
+});
+
+test('RBAC: three roles. Platform Admin has every permission, Operator pushes and sends, Read-only nothing', () => {
+  assert.deepEqual(Object.keys(DB.ROLES), ['PLATFORM_ADMIN', 'INGESTION_OPERATOR', 'READ_ONLY']);
+  const all = DB.PERMISSIONS.map(([p]) => p);
+  const matrix = Object.fromEntries(Object.entries(DB.ROLES).map(([k, r]) => [k, all.filter((p) => r.perms.includes(p))]));
+  assert.deepEqual(matrix.PLATFORM_ADMIN, all, 'admin holds every permission, payload.view included');
+  assert.deepEqual(matrix.INGESTION_OPERATOR, ['source.test', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download', 'nsr.preview', 'nsr.submit']);
+  assert.deepEqual(matrix.READ_ONLY, []);
+  for (const p of ['audit.view', 'security.view', 'payload.view', 'source.edit', 'mapping.edit', 'destination.edit']) assert.ok(!matrix.INGESTION_OPERATOR.includes(p), `operator must not have ${p}`);
+  for (const r of Object.values(DB.ROLES)) for (const p of r.perms) assert.ok(all.includes(p), `unknown permission ${p}`);
+});
+
+test('RBAC: a removed role falls back to Operator; an unknown role is refused', () => {
+  const e = fresh();
+  for (const old of ['SOURCE_CONFIG_ADMIN', 'DATA_QUALITY_ANALYST', 'AUDITOR']) {
+    assert.equal(DB.normalizeRole(old), 'INGESTION_OPERATOR');
+    e.setRole(old);
+    assert.equal(e.state.role, 'INGESTION_OPERATOR');
+    assert.ok(e.can('nsr.submit') && !e.can('audit.view'));
+  }
+  e.state.role = 'AUDITOR'; // state saved before the change
+  assert.ok(e.can('run.start') && !e.can('security.view'), 'old saved state acts as Operator');
+  assert.throws(() => e.setRole('SUPERUSER'), /Unknown role/);
+  assert.equal(DB.normalizeRole('SUPERUSER'), null);
 });
 
 test('source config rejects SSRF targets and plaintext secrets', () => {
