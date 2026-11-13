@@ -37,7 +37,7 @@ function boot() {
 
 test('operators see four plain sections at most, and no Settings', { skip }, () => {
   const u = boot();
-  assert.deepEqual(u.nav(), ['Home', 'Add Records', 'Transfers'], 'opens as Transfer operator');
+  assert.deepEqual(u.nav(), ['Home', 'Add Records', 'Transfers'], 'opens as Operator');
   assert.equal(u.$('h1').textContent, 'Home');
   assert.deepEqual(u.$$('.kpis-3 .kpi .k').map((k) => k.textContent), ['Records received', 'Records transferred', 'Needs Attention']);
   assert.match(u.text(), /need(s)? attention\./, 'Home shows a plain attention alert');
@@ -167,7 +167,7 @@ test('every Settings page still renders for administrators', { skip }, () => {
   assert.deepEqual(u.errors, []);
 });
 
-test('Send to NSR: permitted roles only; check, review and send through the API with keys kept in page memory', { skip }, async () => {
+test('Send to NSIPA Registry: permitted roles only; check, review and send through the API with keys kept in page memory', { skip }, async () => {
   const u = boot();
   const calls = [];
   const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
@@ -201,7 +201,7 @@ test('Send to NSR: permitted roles only; check, review and send through the API 
   u.click('[data-act="nsr-toggle"][data-arg="HH-UI-0001"]');
   u.click(u.button('Check Selected'));
   await u.until(() => /2\. Review/.test(u.text()));
-  assert.ok(u.$$('details.more summary').some((s) => /Show the request NSR will receive/.test(s.textContent)), 'payload behind an expandable section');
+  assert.ok(u.$$('details.more summary').some((s) => /Show the request the NSIPA Registry will receive/.test(s.textContent)), 'payload behind an expandable section');
   assert.ok(u.$('[data-act="nsr-submit"]').disabled, 'needs the submit key, a name and the confirmation tick');
   type('#nsr-submit-key', 'submit-key-ui');
   type('#nsr-operator', 'operator.ui');
@@ -209,21 +209,20 @@ test('Send to NSR: permitted roles only; check, review and send through the API 
   const tick = u.$('#nsr-confirm'); tick.checked = true; tick.dispatchEvent(new u.w.Event('change', { bubbles: true }));
   assert.ok(!u.$('[data-act="nsr-submit"]').disabled);
   u.click(u.$('[data-act="nsr-submit"]'));
-  await u.until(() => /Sent\. NSR received the message\./.test(u.text()));
+  await u.until(() => /Sent\. The NSIPA Registry received the message\./.test(u.text()));
   assert.match(u.text(), /02de528d45974727af21069c1a4ee429/);
-  assert.match(u.text(), /confirm in the Household Register/, 'an ACK is not presented as registry creation');
+  assert.match(u.text(), /confirm them in the registry/, 'an ACK is not presented as registry creation');
   const submit = calls.find((c) => c.url.endsWith('/submit'));
   assert.deepEqual([submit.headers['X-API-Key'], submit.headers['X-Operator-Id'], JSON.parse(submit.body)], ['submit-key-ui', 'operator.ui', { household_serial: 'HH-UI-0001', confirm: true }]);
   assert.ok(calls.filter((c) => !c.url.endsWith('/submit')).every((c) => c.headers['X-API-Key'] === 'standard-key-ui'), 'reads use the standard key');
   const stored = JSON.stringify({ ...u.w.localStorage }) + JSON.stringify({ ...u.w.sessionStorage });
   assert.doesNotMatch(stored, /submit-key-ui|standard-key-ui/, 'keys are never stored');
-  u.role('DATA_QUALITY_ANALYST');
-  assert.ok(!u.$('[data-act="nsr-submit"]'), 'analysts can check but not send');
+  assert.deepEqual(u.$$('#role option').map((o) => o.textContent), ['Platform Admin', 'Operator', 'Read-only'], 'three roles to switch between');
   assert.ok(!u.failed());
   assert.deepEqual(u.errors, []);
 });
 
-test('after a transfer, Save to Server pushes each record, then Send to NSR opens on the server list', { skip }, async () => {
+test('after a transfer, Save to Server pushes each record, then Send to NSIPA Registry opens on the server list', { skip }, async () => {
   const u = boot();
   const pushed = [];
   const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
@@ -263,7 +262,7 @@ test('after a transfer, Save to Server pushes each record, then Send to NSR open
   assert.deepEqual(u.errors, []);
 });
 
-test('leaving a finished transfer without saving does not lose it: Connect on Send to NSR saves it first', { skip }, async () => {
+test('leaving a finished transfer without saving does not lose it: Connect on Send to NSIPA Registry saves it first', { skip }, async () => {
   const u = boot();
   const order = [];
   const pushed = [];
@@ -332,7 +331,7 @@ test('with the keys entered on the review step, submitting saves and queues the 
   const ack = u.$('#wiz-ack');
   if (ack) { ack.checked = true; ack.dispatchEvent(new u.w.Event('change', { bubbles: true })); }
   u.click('[data-act="wiz-start"]');
-  await u.until(() => /queued for NSR/.test(u.text()), 30000);
+  await u.until(() => /queued for the NSIPA Registry/.test(u.text()), 30000);
   const records = calls.filter((c) => c.url === '/api/v1/records');
   const auto = calls.find((c) => c.url.endsWith('/submit/auto'));
   assert.ok(records.length > 0 && calls.indexOf(auto) > calls.indexOf(records[records.length - 1]), 'saved first, then queued');
@@ -341,7 +340,7 @@ test('with the keys entered on the review step, submitting saves and queues the 
   assert.equal(auto.headers['X-Operator-Id'], 'operator.ui');
   assert.equal(new Set(auto.body.household_serials).size, auto.body.household_serials.length);
   assert.match(u.text(), /you can close this page/);
-  assert.match(u.text(), /HH-SKIP: Already sent and received by NSR\./, 'skipped households say why');
+  assert.match(u.text(), /HH-SKIP: Already sent and received by the NSIPA Registry\./, 'skipped households say why');
   u.click('[data-act="wiz-open-nsr"]');
   await u.until(() => /Send History/.test(u.text()) && /ref-123/.test(u.text()));
   assert.match(u.text(), /Automatic/);
@@ -349,5 +348,147 @@ test('with the keys entered on the review step, submitting saves and queues the 
   assert.match(u.text(), /REC-A1/, 'each record can be traced');
   u.click('[data-act="nsr-history-csv"]');
   assert.ok(!u.failed());
+  assert.deepEqual(u.errors, []);
+});
+
+// Every list on every page: at most 8 rows, a pager with "Showing a-b of n" when there are more,
+// fixed column widths. The demo seed holds 450 records in 17 transfers.
+function tablesOk(u, where) {
+  for (const t of u.$$('main table.t')) {
+    const rows = [...t.tBodies[0].rows].filter((r) => !r.classList.contains('expand'));
+    assert.ok(rows.length <= 8, `${where}: a table shows ${rows.length} rows`);
+    assert.ok(t.closest('.tbl-wrap'), `${where}: a table is not in .tbl-wrap`);
+    assert.ok(t.querySelector('colgroup'), `${where}: a table has no fixed column widths`);
+  }
+  for (const p of u.$$('main .pager')) assert.match(p.querySelector('.pager-info').textContent, /^Showing \d+-\d+ of \d+$/, where);
+}
+
+test('every page keeps every list to 8 rows a page, with a pager', { skip }, () => {
+  const u = boot();
+  u.role('PLATFORM_ADMIN');
+  const open = () => u.$$('main details').forEach((d) => { d.open = true; d.dispatchEvent(new u.w.Event('toggle')); });
+  const visit = (page) => { u.click(`[data-act="nav"][data-arg="${page}"]`); };
+  for (const page of ['home', 'ingest']) { visit(page); open(); tablesOk(u, page); }
+  visit('runs');
+  assert.match(u.$('main .pager-info').textContent, /^Showing 1-8 of 17$/);
+  for (const v of ['list', 'attention', 'nsr']) { u.click(`[data-act="tview"][data-arg="${v}"]`); open(); tablesOk(u, `runs/${v}`); }
+  u.click('[data-act="tview"][data-arg="list"]');
+  u.click(u.$('[data-act="run"]'));
+  open();
+  for (const tab of ['records', 'errors', 'recon', 'attempts', 'events', 'mapping', 'audit']) { u.click(`[data-act="tab"][data-arg="${tab}"]`); open(); tablesOk(u, `run/${tab}`); }
+  for (const page of ['sources', 'destinations', 'recon', 'quality', 'lineage', 'audit', 'security', 'architecture']) {
+    u.click('[data-act="nav"][data-arg="settings"]');
+    u.click(`main [data-act="nav"][data-arg="${page}"]`);
+    open(); tablesOk(u, page);
+    assert.ok(!u.failed(), `${page} failed to render`);
+  }
+  u.click('[data-act="nav"][data-arg="settings"]');
+  u.click('main [data-act="nav"][data-arg="errors"]');
+  for (const tab of ['action', 'info', 'dead', 'done', 'types']) { u.click(`[data-act="errtab"][data-arg="${tab}"]`); open(); tablesOk(u, `errors/${tab}`); }
+  u.click('[data-act="nav"][data-arg="settings"]');
+  u.click('main [data-act="nav"][data-arg="mapping"]');
+  for (const tab of ['mapping', 'history', 'schema']) { u.click(`[data-act="maptab"][data-arg="${tab}"]`); open(); tablesOk(u, `mapping/${tab}`); }
+  assert.match(u.$('main .pager-info').textContent, /^Showing 1-8 of 145$/, 'the schema pages its fields');
+  assert.ok(!u.failed());
+  assert.deepEqual(u.errors, []);
+});
+
+test('the pager moves between pages, keeps its place, and returns to page 1 when the filter changes', { skip }, () => {
+  const u = boot();
+  u.click('[data-act="nav"][data-arg="runs"]');
+  const info = () => (u.$('main .pager-info') || { textContent: '' }).textContent;
+  const pageBtn = (label) => u.$$('main .pager button').find((b) => b.textContent.trim() === label);
+  const firstDate = () => u.$('main table.t tbody td').textContent;
+  assert.equal(info(), 'Showing 1-8 of 17');
+  assert.equal(u.$('main .pager [aria-current="page"]').textContent.trim(), '1');
+  assert.ok(pageBtn('Prev').disabled);
+  const top = firstDate();
+  u.click(pageBtn('Next'));
+  assert.equal(info(), 'Showing 9-16 of 17');
+  u.click(pageBtn('3'));
+  assert.equal(info(), 'Showing 17-17 of 17');
+  assert.ok(pageBtn('Next').disabled);
+  assert.equal(u.$$('main table.t tbody tr').length, 1);
+  u.click('[data-act="nav"][data-arg="home"]');
+  u.click('[data-act="nav"][data-arg="runs"]');
+  assert.equal(info(), 'Showing 17-17 of 17', 'the list keeps its page');
+  const status = (v) => { const sel = u.$('select[data-key="tstatus"]'); sel.value = v; sel.dispatchEvent(new u.w.Event('change', { bubbles: true })); };
+  status('Completed');
+  assert.ok(!u.$('main .pager') || /^Showing 1-/.test(info()), 'a filter change returns to page 1');
+  status('');
+  assert.equal(info(), 'Showing 1-8 of 17');
+  assert.equal(firstDate(), top, 'newest first');
+  assert.deepEqual(u.errors, []);
+});
+
+test('Send History folds long household lists to two and "+N more", and expands them in place', { skip }, async () => {
+  const u = boot();
+  const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+  const at = (m) => new Date(Date.UTC(2026, 10, 1, 10, m)).toISOString();
+  const d = (i, n) => ({ id: `dlv-${i}`, status: 'ACCEPTED', origin: 'auto', source: 'Test', created_by: 'op', created_at: at(i), first_attempt_at: at(i), last_attempt_at: at(i), record_count: n, attempt_count: 1, correlation_id: `ref-${i}`, households: Array.from({ length: n }, (_, k) => ({ household_serial: `HH-2702${i}${k}`, record_ids: [`R-${i}-${k}-a`, `R-${i}-${k}-b`, `R-${i}-${k}-c`] })) });
+  const deliveries = [d(1, 5)].concat(Array.from({ length: 10 }, (_, i) => d(i + 2, 1)));
+  u.w.fetch = async (url) => {
+    if (url.endsWith('/config')) return reply(200, { enabled: true });
+    if (url.endsWith('/households')) return reply(200, { items: [] });
+    if (url.includes('/deliveries')) return reply(200, { items: deliveries });
+    return reply(404, { error: { code: 'NOT_FOUND' } });
+  };
+  u.click('[data-act="nav"][data-arg="runs"]');
+  u.click('[data-act="tview"][data-arg="nsr"]');
+  const key = u.$('#nsr-key'); key.value = 'k'; key.dispatchEvent(new u.w.Event('input', { bubbles: true }));
+  await u.until(() => !u.button('Connect').disabled);
+  u.click(u.button('Connect'));
+  await u.until(() => /Send History/.test(u.text()));
+  assert.match(u.text(), /Showing 1-8 of 11/, 'Send History pages');
+  assert.ok(!u.$('[data-act="cell-toggle"][data-arg="hist:dlv-1"]'), 'newest first: the oldest send is on page 2');
+  u.click(u.$$('main .pager button').find((b) => b.textContent.trim() === 'Next'));
+  const cell = () => u.$('[data-act="cell-toggle"][data-arg="hist:dlv-1"]');
+  assert.equal(cell().textContent, 'HH-270210, HH-270211 ... +3 more');
+  assert.equal(cell().getAttribute('aria-expanded'), 'false');
+  u.click(cell());
+  assert.equal(cell().textContent, 'HH-270210, HH-270211, HH-270212, HH-270213, HH-270214');
+  assert.ok(cell().closest('td').classList.contains('open'));
+  u.click(cell());
+  assert.equal(cell().textContent, 'HH-270210, HH-270211 ... +3 more', 'a second click folds it back');
+  assert.ok(u.$('[data-act="cell-toggle"][data-arg^="hist-rec:"]'), 'record IDs fold the same way');
+  assert.match(u.text(), /NSIPA Registry reference/);
+  assert.doesNotMatch(u.text(), /(?<![\w-])NSR(?![\w-])/);
+  assert.deepEqual(u.errors, []);
+});
+
+test('wording: NSIPA Registry, Sample Files, NASSCO National Social Registry first, no screen IDs or demo footers', { skip }, () => {
+  const u = boot();
+  for (const role of ['INGESTION_OPERATOR', 'PLATFORM_ADMIN']) {
+    u.role(role);
+    for (const page of ['home', 'ingest', 'runs']) {
+      u.click(`[data-act="nav"][data-arg="${page}"]`);
+      assert.doesNotMatch(u.$('#app').textContent, /NG2P-CDB|Prototype v0\.5|Synthetic data|Demo · synthetic data/, page);
+      assert.doesNotMatch(u.$('#app').textContent, /(?<![\w-])NSR(?![\w-])|by hand|Demo Files/, page);
+    }
+  }
+  assert.ok(u.$('[data-act="tview"][data-arg="nsr"]').textContent.includes('Send to NSIPA Registry'));
+  // Branding: "DataBridge" only; the clock shows the time without demo controls.
+  for (const page of ['home', 'ingest', 'runs', 'settings', 'sources']) {
+    if (page === 'sources') { u.click('main [data-act="nav"][data-arg="sources"]'); u.click('main [data-act="source"][data-arg="SRC-LEGACY-PILOT"]'); } else u.click(`[data-act="nav"][data-arg="${page}"]`);
+    const shown = u.$('#app').textContent + u.$$('#app [title]').map((e) => e.title).join(' ');
+    assert.doesNotMatch(shown, /NigeriaG2P|(?<![\w-])CCT(?![\w-])|Staff services|Demo clock/, page);
+  }
+  assert.match(u.text(), /Legacy Pilot List/, 'configured names are shown without CCT');
+  assert.equal(u.$('.brand').textContent.trim(), 'DataBridge');
+  assert.equal(u.$('.module-name').textContent, 'DataBridge');
+  assert.match(u.$('.clock').textContent.trim(), /^\d{1,2} [A-Z][a-z]{2} \d\d:\d\d$/);
+  assert.ok(!u.$('[data-act="clock"]') && !u.$('[data-act="auto"]'), 'no +30 s, +3 min or Play');
+  assert.equal(u.d.title || 'DataBridge', 'DataBridge');
+  u.click('[data-act="nav"][data-arg="ingest"]');
+  const picks = u.$$('[data-act="wiz-source"]');
+  assert.equal(picks[0].dataset.arg, 'SRC-LGA-UPLOAD');
+  assert.match(picks[0].textContent, /NASSCO National Social Registry/);
+  assert.deepEqual(picks.slice(1).map((b) => b.dataset.arg), ['SRC-NSR-NASSCO', 'SRC-STATE-JOSH', 'SRC-LEGACY-PILOT'], 'the rest keep their configured order');
+  u.click(picks[0]);
+  assert.ok(u.$$('details.more summary').some((s) => s.textContent === 'Sample Files'));
+  u.click('[data-act="nav"][data-arg="settings"]');
+  u.click('main [data-act="nav"][data-arg="mapping"]');
+  u.click('[data-act="maptab"][data-arg="schema"]');
+  assert.doesNotMatch(u.$('#app').textContent, /(?<![\w-])NSR(?![\w-])/, 'schema labels are reworded at display time');
   assert.deepEqual(u.errors, []);
 });

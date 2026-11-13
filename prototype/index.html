@@ -1,4 +1,4 @@
-<title>CCT DataBridge</title>
+<title>DataBridge</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* CCT DataBridge on the NigeriaG2P design baseline v1.0 (Sathvick Infotech, 19 Oct 2026).
@@ -165,16 +165,40 @@ button.kpi:hover { box-shadow: inset 0 0 0 1px var(--brand); }
 .tag { font: 500 12px var(--font-mono); padding: 2px 6px; border-radius: 4px; background: var(--surface-3); color: var(--ink); white-space: nowrap; }
 .mock-tag { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 2px 6px; border-radius: 4px; background: var(--warn-wash); color: var(--warn-ink); }
 
-/* tables: list rows with soft dividers */
-.tbl-wrap { overflow-x: auto; }
-table.t { width: 100%; font-size: 13.5px; }
-table.t th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 12px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
+/* tables: one look everywhere. Fixed column widths (set per table), one line per cell cut with an
+   ellipsis (the full value is in the cell's tooltip), the same row height, and a horizontal
+   scrollbar when the columns are wider than the page. */
+.tbl-wrap { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: var(--line-input) var(--surface-2); }
+.tbl-wrap::-webkit-scrollbar { height: 10px; }
+.tbl-wrap::-webkit-scrollbar-track { background: var(--surface-2); }
+.tbl-wrap::-webkit-scrollbar-thumb { background: var(--line-input); border-radius: 6px; }
+table.t { width: 100%; table-layout: fixed; font-size: 13.5px; }
+table.t th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 14px; height: 42px; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--surface); }
 table.t th button { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
-table.t td { padding: 12px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+table.t td { padding: 0 14px; height: 52px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.t td > .btns { flex-wrap: nowrap; }
+table.t td input, table.t td select { min-height: 34px; padding: 4px 8px; width: 100%; }
+table.t td input[type=checkbox] { width: auto; min-height: 0; }
+table.t td .btns input.sm { width: 150px; flex: none; }
 table.t tr:last-child td { border-bottom: 0; }
 table.t tbody tr:hover td { background: var(--surface-2); }
 table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabular-nums; }
-table.t tr.sel td, table.t td.sel { background: var(--note); }
+table.t tr.sel td, table.t td.sel, table.t th.sel { background: var(--note); }
+/* An opened detail row and an expanded "+N more" cell may wrap. */
+table.t tr.expand > td { height: auto; padding: 16px 14px; white-space: normal; overflow: visible; background: var(--surface-2); }
+table.t td.many.open { white-space: normal; height: auto; padding-block: 12px; word-break: break-word; }
+.cell-more { background: none; border: 0; padding: 0; font: inherit; color: var(--brand-ink); cursor: pointer; text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: inherit; }
+.cell-more:hover { text-decoration: underline; }
+.cell-link { padding: 0; font-weight: 600; min-height: 0; }
+.btns.nowrap { flex-wrap: nowrap; }
+/* pager under every list longer than one page */
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-top: 1px solid var(--line-soft); }
+.pager-info { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pager-btns { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pager-btns .btn.sm { min-width: 36px; padding-inline: 10px; }
+.pager-btns .btn[aria-current="page"] { background: var(--brand); border-color: var(--brand); color: #FFFFFF; font-weight: 700; }
+.pager-gap { color: var(--muted); padding: 0 2px; }
+.review-item { padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
 .zero { color: var(--muted); }
 .empty { padding: 32px 20px; text-align: center; color: var(--ink-2); background: var(--empty-wash); border-radius: var(--r-card); margin: 12px; }
 .empty b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px; }
@@ -404,7 +428,7 @@ ol.steps { list-style: none; margin: 0; padding: 0; }
 %% A. High-level block component diagram (proposed). Edit freely; scripts/build.py re-injects it into the prototype.
 flowchart LR
   subgraph SRC[&quot;Source registries (external)&quot;]
-    NSR[&quot;NASSCO NSR API&quot;]
+    NSR[&quot;NASSCO NSIPA Registry API&quot;]
     JOSH[&quot;State registry API&lt;br/&gt;e.g. Josh&quot;]
     FUT[&quot;Future registries&quot;]
     XLS[&quot;Excel / CSV uploads&lt;br/&gt;LGA desk officers&quot;]
@@ -415,7 +439,7 @@ flowchart LR
     IDP[&quot;Keycloak OIDC&lt;br/&gt;RBAC, MFA&quot;]
   end
 
-  subgraph MID[&quot;CCT DataBridge middleware&quot;]
+  subgraph MID[&quot;DataBridge middleware&quot;]
     UI[&quot;Admin console&lt;br/&gt;React&quot;]
     CFG[&quot;Source registry&lt;br/&gt;configuration&quot;]
     API_AD[&quot;API ingestion adapter&quot;]
@@ -424,7 +448,7 @@ flowchart LR
     SCH[&quot;Schema registry +&lt;br/&gt;mapping engine&quot;]
     VAL[&quot;Validation +&lt;br/&gt;transformation&quot;]
     DED[&quot;De-duplication +&lt;br/&gt;record matching&quot;]
-    CAN[&quot;Canonical model&lt;br/&gt;NSR 145 fields&quot;]
+    CAN[&quot;Canonical model&lt;br/&gt;NSIPA Registry 145 fields&quot;]
     BUS[(&quot;Queue / event bus&lt;br/&gt;RabbitMQ&quot;)]
     DEL[&quot;Primary delivery adapter&lt;br/&gt;idempotent, retry, DLQ&quot;]
     REP[&quot;Replica sync monitor&quot;]
@@ -478,7 +502,7 @@ flowchart LR
 <details><summary>Mermaid source</summary><pre class="code">%% A. High-level block component diagram (proposed). Edit freely; scripts/build.py re-injects it into the prototype.
 flowchart LR
   subgraph SRC[&quot;Source registries (external)&quot;]
-    NSR[&quot;NASSCO NSR API&quot;]
+    NSR[&quot;NASSCO NSIPA Registry API&quot;]
     JOSH[&quot;State registry API&lt;br/&gt;e.g. Josh&quot;]
     FUT[&quot;Future registries&quot;]
     XLS[&quot;Excel / CSV uploads&lt;br/&gt;LGA desk officers&quot;]
@@ -489,7 +513,7 @@ flowchart LR
     IDP[&quot;Keycloak OIDC&lt;br/&gt;RBAC, MFA&quot;]
   end
 
-  subgraph MID[&quot;CCT DataBridge middleware&quot;]
+  subgraph MID[&quot;DataBridge middleware&quot;]
     UI[&quot;Admin console&lt;br/&gt;React&quot;]
     CFG[&quot;Source registry&lt;br/&gt;configuration&quot;]
     API_AD[&quot;API ingestion adapter&quot;]
@@ -498,7 +522,7 @@ flowchart LR
     SCH[&quot;Schema registry +&lt;br/&gt;mapping engine&quot;]
     VAL[&quot;Validation +&lt;br/&gt;transformation&quot;]
     DED[&quot;De-duplication +&lt;br/&gt;record matching&quot;]
-    CAN[&quot;Canonical model&lt;br/&gt;NSR 145 fields&quot;]
+    CAN[&quot;Canonical model&lt;br/&gt;NSIPA Registry 145 fields&quot;]
     BUS[(&quot;Queue / event bus&lt;br/&gt;RabbitMQ&quot;)]
     DEL[&quot;Primary delivery adapter&lt;br/&gt;idempotent, retry, DLQ&quot;]
     REP[&quot;Replica sync monitor&quot;]
@@ -1666,7 +1690,7 @@ flowchart TB
     VAULT[&quot;Vault + KMS&quot;]
   end
   subgraph Ext[&quot;External source systems&quot;]
-    NSR[&quot;NASSCO NSR API&lt;br/&gt;[P] mock adapter&quot;]
+    NSR[&quot;NASSCO NSIPA Registry API&lt;br/&gt;[P] mock adapter&quot;]
     STATE[&quot;State registries&lt;br/&gt;[P] mock adapter&quot;]
   end
   subgraph Reg[&quot;OpenG2P registry deployment&quot;]
@@ -1730,7 +1754,7 @@ flowchart TB
     VAULT[&quot;Vault + KMS&quot;]
   end
   subgraph Ext[&quot;External source systems&quot;]
-    NSR[&quot;NASSCO NSR API&lt;br/&gt;[P] mock adapter&quot;]
+    NSR[&quot;NASSCO NSIPA Registry API&lt;br/&gt;[P] mock adapter&quot;]
     STATE[&quot;State registries&lt;br/&gt;[P] mock adapter&quot;]
   end
   subgraph Reg[&quot;OpenG2P registry deployment&quot;]

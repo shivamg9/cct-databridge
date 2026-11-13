@@ -25,16 +25,16 @@ function classify(status, body) {
     response_message_id: body.header && body.header.message_id ? String(body.header.message_id).slice(0, 100) : null,
   } : null;
   if (status >= 200 && status < 300) {
-    if (!ack) return { outcome: 'UNCERTAIN', reason: 'NSR answered 2xx without a readable acknowledgement', ack };
-    if (ack.ack_status === 'ACK' && (ack.status === undefined || ack.status === 'succ')) return { outcome: 'ACCEPTED', reason: 'NSR acknowledged the message', ack };
-    if (ack.ack_status === 'NACK' || ack.ack_status === 'ERR' || (ack.status && ack.status !== 'succ')) return { outcome: 'REJECTED', reason: 'NSR returned a negative acknowledgement', ack };
-    return { outcome: 'UNCERTAIN', reason: 'NSR answered 2xx with an unrecognised acknowledgement', ack };
+    if (!ack) return { outcome: 'UNCERTAIN', reason: 'NSIPA Registry answered 2xx without a readable acknowledgement', ack };
+    if (ack.ack_status === 'ACK' && (ack.status === undefined || ack.status === 'succ')) return { outcome: 'ACCEPTED', reason: 'NSIPA Registry acknowledged the message', ack };
+    if (ack.ack_status === 'NACK' || ack.ack_status === 'ERR' || (ack.status && ack.status !== 'succ')) return { outcome: 'REJECTED', reason: 'NSIPA Registry returned a negative acknowledgement', ack };
+    return { outcome: 'UNCERTAIN', reason: 'NSIPA Registry answered 2xx with an unrecognised acknowledgement', ack };
   }
-  if (status === 401 || status === 403) return { outcome: 'FAILED', reason: `NSR refused the sender (HTTP ${status}); check partner registration and signature`, ack };
-  if (status === 404) return { outcome: 'FAILED', reason: 'NSR endpoint not found (HTTP 404); check the base URL and data model', ack };
-  if (status === 408 || status === 429 || status === 502 || status === 503) return { outcome: 'RETRY', reason: `NSR is temporarily unavailable (HTTP ${status})`, ack };
-  if (status >= 400 && status < 500) return { outcome: 'REJECTED', reason: `NSR rejected the message (HTTP ${status})`, ack };
-  return { outcome: 'UNCERTAIN', reason: `NSR failed while handling the message (HTTP ${status}); it may or may not have been ingested`, ack };
+  if (status === 401 || status === 403) return { outcome: 'FAILED', reason: `NSIPA Registry refused the sender (HTTP ${status}); check partner registration and signature`, ack };
+  if (status === 404) return { outcome: 'FAILED', reason: 'NSIPA Registry endpoint not found (HTTP 404); check the base URL and data model', ack };
+  if (status === 408 || status === 429 || status === 502 || status === 503) return { outcome: 'RETRY', reason: `NSIPA Registry is temporarily unavailable (HTTP ${status})`, ack };
+  if (status >= 400 && status < 500) return { outcome: 'REJECTED', reason: `NSIPA Registry rejected the message (HTTP ${status})`, ack };
+  return { outcome: 'UNCERTAIN', reason: `NSIPA Registry failed while handling the message (HTTP ${status}); it may or may not have been ingested`, ack };
 }
 
 // Sends body (a JSON string). Resolves, never rejects: { outcome, reason, httpStatus, ack, durationMs, errorCode }.
@@ -56,16 +56,16 @@ function send(cfg, body) {
         try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (e) { /* not JSON */ }
         done({ httpStatus: res.statusCode, ...classify(res.statusCode, parsed) });
       });
-      res.on('error', () => done({ httpStatus: res.statusCode, outcome: 'UNCERTAIN', reason: 'The NSR response was cut off' }));
+      res.on('error', () => done({ httpStatus: res.statusCode, outcome: 'UNCERTAIN', reason: 'The NSIPA Registry response was cut off' }));
     });
     // 'finish': the whole request body has been handed to the network. From then on the outcome is uncertain.
     req.on('finish', () => { written = true; });
     req.on('error', (e) => {
       const code = e.code || 'ERROR';
-      if (TLS.test(code) || TLS.test(e.message || '')) return done({ outcome: 'FAILED', reason: `TLS failure talking to NSR (${code})`, errorCode: code });
-      if (code === 'ETIMEDOUT_DB') return done({ outcome: written ? 'UNCERTAIN' : 'RETRY', reason: `No answer from NSR within ${cfg.timeoutMs} ms${written ? '; the message may have been received' : ''}`, errorCode: 'TIMEOUT' });
-      if (NOT_SENT.has(code) || !written) return done({ outcome: 'RETRY', reason: `Could not reach NSR (${code})`, errorCode: code });
-      return done({ outcome: 'UNCERTAIN', reason: `The connection to NSR failed after the message was sent (${code})`, errorCode: code });
+      if (TLS.test(code) || TLS.test(e.message || '')) return done({ outcome: 'FAILED', reason: `TLS failure talking to NSIPA Registry (${code})`, errorCode: code });
+      if (code === 'ETIMEDOUT_DB') return done({ outcome: written ? 'UNCERTAIN' : 'RETRY', reason: `No answer from NSIPA Registry within ${cfg.timeoutMs} ms${written ? '; the message may have been received' : ''}`, errorCode: 'TIMEOUT' });
+      if (NOT_SENT.has(code) || !written) return done({ outcome: 'RETRY', reason: `Could not reach NSIPA Registry (${code})`, errorCode: code });
+      return done({ outcome: 'UNCERTAIN', reason: `The connection to NSIPA Registry failed after the message was sent (${code})`, errorCode: code });
     });
     const timer = setTimeout(() => { const e = new Error('timeout'); e.code = 'ETIMEDOUT_DB'; req.destroy(e); }, cfg.timeoutMs);
     req.end(body);

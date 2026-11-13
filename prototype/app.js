@@ -55,9 +55,13 @@
     const [l, tone] = T.recordStatus(kind, v);
     return html`<span class="pill ${tone}">${l}</span>`;
   };
-  const roleName = (k) => T.ROLE_LABELS[k] || DB.ROLES[k].label;
-  const fieldLabel = (name) => (FIELD[name] ? FIELD[name].label : label(name));
-  const issueText = (i) => T.issueText(i, i.field && FIELD[i.field] ? FIELD[i.field].label : null);
+  // Audit entries can name a role that no longer exists; it shows as the role it became.
+  const roleName = (k) => T.ROLE_LABELS[DB.normalizeRole(k)] || label(k);
+  // Build-sheet labels come from the generated schema.js; their wording is adjusted here, not there.
+  const fieldLabel = (name) => (FIELD[name] ? T.brand(FIELD[name].label) : label(name));
+  const issueText = (i) => T.issueText(i, i.field && FIELD[i.field] ? fieldLabel(i.field) : null);
+  // Newest first; entries with the same time keep their newest-added-first order.
+  const newest = (list, at) => list.map((x, i) => [x, i]).sort((a, b) => ((at(b[0]) || 0) - (at(a[0]) || 0)) || b[1] - a[1]).map(([x]) => x);
   const srcName = (id) => (E.getSource(id) || { name: 'Unknown source' }).name;
   const modes = (s) => s.modes.map(T.modeLabel).join(' or ');
   // Settings and technical details (codes, keys, trace IDs) are shown only to these roles. This is a
@@ -97,12 +101,54 @@
     wiz: newWizard(), mapSource: 'SRC-NSR-NASSCO', mapDraft: null, mapTab: 'mapping', mapTest: null, mapVal: null, mapNote: '',
     schemaQ: { q: '', object: '', mandatory: '', sens: '', fill: '' },
     reconScope: '', reconOpen: null, lineQ: '', auditQ: '', sourceForm: null, modal: null, toast: null, animating: new Set(), auto: false, payloadView: null,
-    // Send to NSR. Keys live in this object only (page memory), never in storage.
+    // Send to NSIPA Registry. Keys live in this object only (page memory), never in storage.
     nsr: { key: '', submitKey: '', operator: '', cfg: null, households: null, deliveries: null, selected: [], preview: null, result: null, confirm: false, busy: false, error: null, notes: {}, auto: true },
     // Add Records transfers not yet on the server, the latest save, and the latest automatic send. Page memory: a reload loses them.
     unsaved: [], save: null, autoSend: null,
+    // The page each list is on ({ key: { page, sig } }), and the cells opened to show every value.
+    pages: {}, expanded: new Set(),
   };
   function newWizard() { return { step: 1, sourceId: '', mode: '', file: null, upload: null, headerCheck: null, sim: {}, dry: null, ack: false, testResult: null, runId: null, showIssues: false }; }
+
+  // ---------------------------------------------------------------------------
+  // Lists and tables: one builder, so every list in the console pages, sizes and reads the same way
+  // ---------------------------------------------------------------------------
+  const empty = (msg) => html`<div class="empty">${msg || 'Nothing to show.'}</div>`;
+  // sig: the filters that produced the list. When they change, the list starts again at page 1.
+  const pageOf = (key, total, sig) => T.pageState(UI.pages, key, total, JSON.stringify(sig === undefined ? null : sig));
+  function pager(key, pg) {
+    if (pg.pages <= 1) return '';
+    const btn = (n, text, extra) => html`<button class="btn sm" data-act="page" data-arg="${key}|${n}" ${raw(extra || '')}>${text}</button>`;
+    return html`<nav class="pager" aria-label="Pages"><span class="pager-info">${T.pageLabel(pg)}</span><div class="pager-btns">
+      ${btn(pg.page - 1, 'Prev', pg.page === 1 ? 'disabled' : 'aria-label="Previous page"')}
+      ${T.pageItems(pg.page, pg.pages).map((n) => (n === '...' ? html`<span class="pager-gap" aria-hidden="true">...</span>` : btn(n, n, n === pg.page ? 'aria-current="page"' : `aria-label="Page ${n}"`)))}
+      ${btn(pg.page + 1, 'Next', pg.page === pg.pages ? 'disabled' : 'aria-label="Next page"')}</div></nav>`;
+  }
+  // A paged list of anything (callout lines, review cards). render(item) returns its markup.
+  function pagedList(key, items, render, sig) {
+    const pg = pageOf(key, items.length, sig);
+    return html`${items.slice(pg.from, pg.to).map(render)}${pager(key, pg)}`;
+  }
+  // o.key: page-state key, unique per list · o.items · o.sig: filters (a change returns to page 1)
+  // o.cols: [header, width in px ('' shares what is left), class] · o.row(item) returns <tr>…</tr> · o.empty
+  function table(o) {
+    const items = o.items || [];
+    if (!items.length) return empty(o.empty);
+    const pg = pageOf(o.key, items.length, o.sig);
+    const cols = o.cols;
+    const minWidth = cols.reduce((s, c) => s + (c[1] || 160), 0);
+    return html`<div class="tbl-wrap"><table class="t" style="min-width:${minWidth}px"><colgroup>${cols.map((c) => html`<col style="${c[1] ? `width:${c[1]}px` : ''}">`)}</colgroup>
+      ${o.head === false ? '' : html`<thead><tr>${cols.map((c) => html`<th class="${c[2] || ''}">${c[0]}</th>`)}</tr></thead>`}
+      <tbody>${items.slice(pg.from, pg.to).map(o.row)}</tbody></table></div>${pager(o.key, pg)}`;
+  }
+  // A cell that lists many values shows the first two, then "... +N more". Clicking it shows them all in
+  // the row; clicking again folds it back.
+  function manyCell(id, values, cls) {
+    const list = values.filter((v) => v !== null && v !== undefined && v !== '');
+    if (list.length <= 2) return html`<td class="${cls || ''}">${list.join(', ') || '—'}</td>`;
+    const open = UI.expanded.has(id);
+    return html`<td class="${cls || ''} many ${open ? 'open' : ''}"><button class="cell-more" data-act="cell-toggle" data-arg="${id}" aria-expanded="${String(open)}" title="${open ? 'Show fewer' : list.join(', ')}">${open ? list.join(', ') : `${list.slice(0, 2).join(', ')} ... +${list.length - 2} more`}</button></td>`;
+  }
 
   // Settings pages are for administrators; anyone else asking for one lands on Home.
   const allowedPage = (page) => (T.SETTINGS_PAGES.includes(page) && !techAllowed() ? 'home' : page);
@@ -138,8 +184,8 @@
     return 10 * p;
   }
   const legend = (items) => html`<div class="legend">${items.map((i) => html`<span><i style="background:${i.color}"></i>${i.name}</span>`)}</div>`;
-  function chartTable(head, rows) {
-    return html`<details class="chart-table"><summary>Table view</summary><div class="tbl-wrap"><table><thead><tr>${head.map((h) => html`<th>${h}</th>`)}</tr></thead><tbody>${rows.map((r) => html`<tr>${r.map((c) => html`<td>${c}</td>`)}</tr>`)}</tbody></table></div></details>`;
+  function chartTable(key, head, rows) {
+    return html`<details class="chart-table"><summary>Table view</summary>${table({ key, items: rows, cols: head.map((h, i) => [h, i ? 120 : 160, i ? 'num' : '']), row: (r) => html`<tr>${r.map((c, i) => html`<td class="${i ? 'num' : ''}">${c}</td>`)}</tr>` })}</details>`;
   }
 
   function columns({ cats, series, h, fmt, totals, xLabel }) {
@@ -248,50 +294,43 @@
   function navCounts() {
     return { attention: attentionTotals().total };
   }
-  // Screen register, following the NigeriaG2P naming convention NG2P-{MODULE}-{###}.
-  // CDB (CCT DataBridge) is a proposed module code, not one of the 26 areas in the client baseline.
+  // Screen register: screen number and the role each screen is for. The numbers are not shown in the console.
   const PAGE_META = {
-    home: ['001', 'Transfer operator'], runs: ['002', 'Transfer operator'], run: ['003', 'Transfer operator'], errors: ['004', 'Platform admin'],
-    recon: ['005', 'Platform admin'], sources: ['006', 'Source admin'], destinations: ['007', 'Platform admin'], mapping: ['008', 'Source admin'],
-    ingest: ['009', 'Transfer operator'], quality: ['010', 'Data quality analyst'], lineage: ['011', 'Data quality analyst'], audit: ['012', 'Auditor'],
-    security: ['013', 'Auditor'], architecture: ['014', 'Platform admin'], settings: ['015', 'Platform admin'],
+    home: ['001', 'Operator'], runs: ['002', 'Operator'], run: ['003', 'Operator'], errors: ['004', 'Platform Admin'],
+    recon: ['005', 'Platform Admin'], sources: ['006', 'Platform Admin'], destinations: ['007', 'Platform Admin'], mapping: ['008', 'Platform Admin'],
+    ingest: ['009', 'Operator'], quality: ['010', 'Platform Admin'], lineage: ['011', 'Platform Admin'], audit: ['012', 'Platform Admin'],
+    security: ['013', 'Platform Admin'], architecture: ['014', 'Platform Admin'], settings: ['015', 'Platform Admin'],
   };
-  const screenId = () => `NG2P-CDB-${(PAGE_META[UI.page] || PAGE_META.home)[0]}`;
   // Which of the four sections a page belongs to.
   const section = (p) => (p === 'run' ? 'runs' : T.SETTINGS_PAGES.includes(p) ? 'settings' : p);
 
   function shell(content) {
     const nc = navCounts();
     const nav = T.NAV.filter(([k]) => k !== 'settings' || techAllowed());
-    return html`<div class="strip"><span>NigeriaG2P · CCT DataBridge</span><span>Demo · synthetic data</span></div>
+    return html`<div class="strip"><span>DataBridge</span></div>
       <div class="shell">
       <nav class="rail" aria-label="Main">
-        <div class="brand"><span class="brand-word">NigeriaG2P</span><span class="brand-sub">Staff services</span><span class="brand-app">CCT DataBridge</span></div>
+        <div class="brand"><span class="brand-word">DataBridge</span></div>
         <div class="nav-wrap"><div class="nav-group">${nav.map(([k, l]) => html`
           <button class="nav-btn" data-act="nav" data-arg="${k}" ${raw(section(UI.page) === k ? 'aria-current="page"' : '')}>${l}
           ${k === 'runs' && nc.attention ? html`<span class="nav-count" title="Needs Attention">${nc.attention}</span>` : ''}</button>`)}</div></div>
         <div class="rail-role"><b>Role</b>${roleName(S.role)}</div>
-        <div class="rail-foot">Prototype v0.5 · NigeriaG2P v1.0</div>
       </nav>
       <div class="main">
         <header class="topbar">
-          <div class="env"><span class="module-name">CCT DataBridge</span></div>
-          <div class="clock" title="Demo clock: runs retries and replication checks"><span>Demo clock</span><time>${fmtTime(S.now, false)}</time>
-            <button class="btn sm" data-act="clock" data-arg="30000">+30 s</button>
-            <button class="btn sm" data-act="clock" data-arg="180000">+3 min</button>
-            <button class="btn sm" data-act="auto" aria-pressed="${UI.auto}">${UI.auto ? 'Pause' : 'Play'}</button></div>
+          <div class="env"><span class="module-name">DataBridge</span></div>
+          <div class="clock"><time>${fmtTime(S.now, false)}</time></div>
           <div class="who"><label for="role">Acting as</label>
             <select id="role" data-change="role">${Object.keys(DB.ROLES).map((k) => html`<option value="${k}" ${raw(S.role === k ? 'selected' : '')}>${roleName(k)}</option>`)}</select></div>
         </header>
         <main class="content">${content}</main>
-        <div class="page-foot">${screenId()} · Synthetic data</div>
       </div></div>
       ${modal()}${UI.toast ? html`<div class="toast ${UI.toast.crit ? 'crit' : ''}" role="status">${UI.toast.msg}</div>` : ''}`;
   }
-  // Page header: breadcrumb (screen ID, parent section), title, actions. Notes are no longer shown.
+  // Page header: breadcrumb (parent section only), title, actions. Notes are no longer shown.
   function head(title, note, actions, crumbs) {
-    const parent = T.SETTINGS_PAGES.includes(UI.page) && UI.page !== 'settings' ? html` / <button data-act="nav" data-arg="settings">Settings</button>` : '';
-    return html`<div class="page-head"><div><div class="crumbs">${screenId()}${parent}${crumbs ? html` / ${crumbs}` : ''}</div><h1>${title}</h1></div>${actions ? html`<div class="btns">${actions}</div>` : ''}</div>`;
+    const trail = [T.SETTINGS_PAGES.includes(UI.page) && UI.page !== 'settings' ? html`<button data-act="nav" data-arg="settings">Settings</button>` : '', crumbs || ''].filter(Boolean);
+    return html`<div class="page-head"><div>${trail.length ? html`<div class="crumbs">${trail.map((c, i) => html`${i ? ' / ' : ''}${c}`)}</div>` : ''}<h1>${title}</h1></div>${actions ? html`<div class="btns">${actions}</div>` : ''}</div>`;
   }
 
   // ---------------------------------------------------------------------------
@@ -343,7 +382,7 @@
         <section class="panel c8"><header><h3>Records per day</h3></header><div class="body">
           ${legend([{ name: L.written, color: C.good }, { name: L.pending, color: C.warn }, { name: L.failed, color: C.crit }, { name: L.rejected, color: C.serious }])}
           ${columns({ cats: dayCats, totals: true, series: [{ name: L.written, color: C.good, values: a.byDay.map((d) => d.written) }, { name: L.pending, color: C.warn, values: a.byDay.map((d) => d.outstanding) }, { name: L.failed, color: C.crit, values: a.byDay.map((d) => d.failed) }, { name: L.rejected, color: C.serious, values: a.byDay.map((d) => d.rejected) }] })}
-          ${chartTable(['Day', 'Received', 'Written', 'Pending', 'Write failed', 'Rejected'], a.byDay.map((d) => [d.day, d.received, d.written, d.outstanding, d.failed, d.rejected]))}</div></section>
+          ${chartTable('chart-days', ['Day', 'Received', 'Written', 'Pending', 'Write failed', 'Rejected'], a.byDay.slice().reverse().map((d) => [d.day, d.received, d.written, d.outstanding, d.failed, d.rejected]))}</div></section>
         <section class="panel c4"><header><h3>Write outcomes</h3><span class="sub">${num(outTotal)} sent</span></header><div class="body">
           ${hbars([['Written', out.WRITTEN, C.good], ['Retry scheduled', out.AWAITING_RETRY, C.warn], ['Outcome unknown', out.UNKNOWN, C.serious], ['Write failed', out.DEAD_LETTER, C.crit], ['Awaiting commit', out.IN_FLIGHT, C.muted]].map(([l, v, c]) => ({ label: l, segs: [{ name: l, color: c, v }] })), { max: Math.max(1, outTotal) })}</div></section>
         <section class="panel c6"><header><h3>Results by source</h3></header><div class="body">
@@ -358,7 +397,7 @@
         <section class="panel c6"><header><h3>Throughput</h3><span class="sub">Records/min, last ${tp.length} transfers</span></header><div class="body">
           ${legend([{ name: 'API', color: C.s1 }, { name: 'File upload', color: C.s2 }])}
           ${columns({ cats: tp.map((t) => ({ label: '', tip: fmtTime(t.at, false) })), series: [{ name: 'API', color: C.s1, values: tp.map((t) => (t.mode === 'API' ? t.perMin : 0)) }, { name: 'File upload', color: C.s2, values: tp.map((t) => (t.mode === 'IMPORT' ? t.perMin : 0)) }], xLabel: 'oldest → newest' })}
-          ${chartTable(['Transfer', 'Method', 'Records/min'], tp.map((t) => [fmtTime(t.at, false), T.modeLabel(t.mode), t.perMin]))}</div></section>
+          ${chartTable('chart-throughput', ['Transfer', 'Method', 'Records/min'], newest(tp, (t) => t.at).map((t) => [fmtTime(t.at, false), T.modeLabel(t.mode), t.perMin]))}</div></section>
         <section class="panel c6"><header><h3>Retries per day</h3></header><div class="body">
           ${columns({ cats: dayCats, totals: true, series: [{ name: 'Retries', color: C.s4, values: a.byDay.map((d) => d.retries) }] })}</div></section>
         <section class="panel c6"><header><h3>Replication lag</h3><span class="sub">Seconds, per transfer</span></header><div class="body">
@@ -434,24 +473,22 @@
   const runState = (run) => (UI.animating.has(run.id) ? 'RUNNING' : E.runStatus(run));
   const simplePill = (st) => { const x = T.simpleStatus(st); return html`<span class="pill ${x.tone}">${x.label}</span>`; };
 
-  function runsTable(runs) {
-    if (!runs.length) return html`<div class="empty"><b>No transfers.</b></div>`;
-    return html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Date</th><th>Source</th><th class="num">Records</th><th>Status</th><th></th></tr></thead><tbody>
-      ${runs.map((run) => html`<tr><td>${fmtTime(run.createdAt, false)}</td><td>${run.sourceName}</td><td class="num">${num(run.records.length)}</td><td>${simplePill(runState(run))}</td>
-        <td class="num"><button class="btn sm" data-act="run" data-arg="${run.id}">View Details</button></td></tr>`)}
-      </tbody></table></div>`;
+  function runsTable(runs, key, sig) {
+    return table({ key, sig, items: runs, empty: 'No transfers.', cols: [['Date', 150], ['Source', ''], ['Records', 110, 'num'], ['Status', 180], ['', 150, 'num']],
+      row: (run) => html`<tr><td>${fmtTime(run.createdAt, false)}</td><td>${run.sourceName}</td><td class="num">${num(run.records.length)}</td><td>${simplePill(runState(run))}</td>
+        <td class="num"><button class="btn sm" data-act="run" data-arg="${run.id}">View Details</button></td></tr>` });
   }
 
   // Transfers: the list, or what needs attention across all transfers.
   function pageRuns() {
     const at = attentionTotals();
-    const all = S.runs.slice().reverse();
+    const all = newest(S.runs, (r) => r.createdAt);
     const runs = UI.tstatus ? all.filter((r) => T.simpleStatus(runState(r)).label === UI.tstatus) : all;
-    const views = [['list', 'All Transfers'], ['attention', `Needs Attention (${num(at.total)})`]].concat(E.can('nsr.preview') ? [['nsr', 'Send to NSR']] : []);
+    const views = [['list', 'All Transfers'], ['attention', `Needs Attention (${num(at.total)})`]].concat(E.can('nsr.preview') ? [['nsr', 'Send to NSIPA Registry']] : []);
     if (UI.tview === 'nsr' && !E.can('nsr.preview')) UI.tview = 'list';
     const body = UI.tview === 'attention' ? attentionView() : UI.tview === 'nsr' ? nsrView() : html`
-      <label class="field inline">Status<select data-change="bind" data-key="tstatus"><option value="">All</option>${T.SIMPLE_STATUSES.map((l) => html`<option value="${l}" ${raw(UI.tstatus === l ? 'selected' : '')}>${l}</option>`)}</select></label>
-      <section class="panel"><div class="body flush">${runsTable(runs)}</div></section>`;
+      <div class="filters"><label class="field">Status<select data-change="bind" data-key="tstatus"><option value="">All</option>${T.SIMPLE_STATUSES.map((l) => html`<option value="${l}" ${raw(UI.tstatus === l ? 'selected' : '')}>${l}</option>`)}</select></label></div>
+      <section class="panel"><div class="body flush">${runsTable(runs, 'runs', UI.tstatus)}</div></section>`;
     return html`${head('Transfers', null, html`<button class="btn primary" data-act="nav" data-arg="ingest" ${dis('run.start')}>Add Records</button>`)}
       <div class="tabs big" role="tablist">${views.map(([k, l]) => html`<button role="tab" aria-selected="${UI.tview === k}" data-act="tview" data-arg="${k}">${l}</button>`)}</div>
       ${body}`;
@@ -461,32 +498,33 @@
     const gs = attentionGroups();
     const act = gs.filter((g) => g.needsUser), auto = gs.filter((g) => !g.needsUser);
     const retryable = S.runs.flatMap((r) => r.records).filter((r) => ['AWAITING_RETRY', 'UNKNOWN'].includes(r.primary.status) || (r.primary.status === 'DEAD_LETTER' && !(r.fault && r.fault.kind === 'permanent')));
-    return html`${act.length ? html`<section class="panel">${retryable.length > 1 ? html`<header><span class="sub">${num(act.length)} issue(s)</span><button class="btn" data-act="retry-all" ${dis('run.retry')}>Retry All (${num(retryable.length)})</button></header>` : ''}<div class="body flush">${groupRows(act)}</div></section>` : html`<div class="callout ok">Nothing needs attention.</div>`}
-      ${auto.length ? moreDetails(`Handled automatically (${auto.length})`, groupRows(auto)) : ''}
+    return html`${act.length ? html`<section class="panel">${retryable.length > 1 ? html`<header><span class="sub">${num(act.length)} issue(s)</span><button class="btn" data-act="retry-all" ${dis('run.retry')}>Retry All (${num(retryable.length)})</button></header>` : ''}<div class="body flush">${groupRows(act, 'attn-open')}</div></section>` : html`<div class="callout ok">Nothing needs attention.</div>`}
+      ${auto.length ? moreDetails(`Handled automatically (${auto.length})`, groupRows(auto, 'attn-auto')) : ''}
       ${techAllowed() ? html`<div class="btns"><button class="btn sm ghost" data-act="nav" data-arg="errors">Exception Log</button><button class="btn sm ghost" data-act="nav" data-arg="recon">Reconciliation</button></div>` : ''}`;
   }
 
   // ---------------------------------------------------------------------------
-  // Send to NSR: the outbound OpenG2P NSR webhook, through the DataBridge API (/api/v1/nsr/...).
+  // Send to NSIPA Registry: the outbound OpenG2P NSR webhook, through the DataBridge API (/api/v1/nsr/...).
   // The server decides who may submit (DATABRIDGE_NSR_SUBMIT_KEY); the role check here only shapes the screen.
   // ---------------------------------------------------------------------------
   const NSR_STATUS = {
     READY: ['Ready', 'good'], VALIDATION_FAILED: ['Needs correction', 'warn'],
-    PENDING: ['Sending', 'info run'], RETRY_SCHEDULED: ['Will retry', 'info run'], ACCEPTED: ['Received by NSR', 'good'],
-    CONFIRMATION_PENDING: ['Check NSR', 'warn'], REJECTED: ['Rejected by NSR', 'crit'], DELIVERY_FAILED: ['Not delivered', 'crit'],
+    PENDING: ['Sending', 'info run'], RETRY_SCHEDULED: ['Will retry', 'info run'], ACCEPTED: ['Received by NSIPA Registry', 'good'],
+    CONFIRMATION_PENDING: ['Check NSIPA Registry', 'warn'], REJECTED: ['Rejected by NSIPA Registry', 'crit'], DELIVERY_FAILED: ['Not delivered', 'crit'],
   };
   const NSR_REASONS = {
     CONSENT_NOT_GIVEN: 'Consent to share data was not given.', CONSENT_MISSING: 'Consent is not recorded for every member.',
     NO_HEAD: 'No household head is marked.', MULTIPLE_HEADS: 'More than one household head is marked.', HEAD_CONFLICT: 'Head of household details disagree.',
     MEMBER_COUNT_MISMATCH: 'The member count does not match the members on file.', MEMBER_COUNT_MISSING: 'The member count is missing.',
     DUPLICATE_MEMBER: 'The same person appears twice.', HOUSEHOLD_FIELD_CONFLICT: 'Members have different household details, for example the address.',
-    MIXED_SYNTHETIC: 'Test and real records are mixed.', SYNTHETIC_NOT_ALLOWED: 'Test records cannot be sent to NSR here.',
+    MIXED_SYNTHETIC: 'Test and real records are mixed.', SYNTHETIC_NOT_ALLOWED: 'Test records cannot be sent to the NSIPA Registry here.',
     TOO_MANY_MEMBERS: 'Too many members for one submission.', HOUSEHOLD_NOT_FOUND: 'Household not found.',
-    NSR_WEBHOOK_DISABLED: 'Sending to NSR is switched off in this environment.', NSR_AUTO_SEND_DISABLED: 'Automatic sending is switched off in this environment. The records are saved: send them from Send to NSR.',
-    ALREADY_ACCEPTED: 'Already sent and received by NSR.', DELIVERY_IN_PROGRESS: 'Already being sent.', ACCEPTED_BEFORE_CHANGED: 'Changed since NSR received it. Send it again by hand from Send to NSR.', BATCH_TOO_LARGE: 'Too large to send.', NSR_SUBMIT_FORBIDDEN: 'This key cannot send to NSR. Enter the NSR submit key.',
+    NSR_WEBHOOK_DISABLED: 'Sending to the NSIPA Registry is switched off in this environment.', NSR_AUTO_SEND_DISABLED: 'Automatic sending is switched off in this environment. The records are saved: send them from Send to NSIPA Registry.',
+    ALREADY_ACCEPTED: 'Already sent and received by the NSIPA Registry.', DELIVERY_IN_PROGRESS: 'Already being sent.', ACCEPTED_BEFORE_CHANGED: 'Changed since the NSIPA Registry received it. Send it again manually from Send to NSIPA Registry.',
+    NSR_SUBMIT_FORBIDDEN: 'This key cannot send to the NSIPA Registry. Enter the NSIPA Registry submit key.',
     UNAUTHORISED: 'The API key was not accepted.', OPERATOR_REQUIRED: 'Enter your name or operator ID.', DUPLICATE_SUBMISSION: 'Already sent, or being sent.',
     BATCH_TOO_LARGE: 'Too many households at once. Select fewer.', VALIDATION_FAILED: 'Some households need correction first.',
-    CONFIRMATION_REQUIRED: 'Check NSR first, then confirm.', NOT_RETRYABLE: 'This delivery cannot be retried.', NETWORK: 'The DataBridge API cannot be reached from this page.',
+    CONFIRMATION_REQUIRED: 'Check the NSIPA Registry first, then confirm.', NOT_RETRYABLE: 'This delivery cannot be retried.', NETWORK: 'The DataBridge API cannot be reached from this page.',
   };
   const nsrPill = (s) => { const [l, tone] = NSR_STATUS[s] || [label(s), '']; return html`<span class="pill ${tone}">${l}</span>`; };
   const nsrReason = (code) => NSR_REASONS[code] || 'Something went wrong. Ask an administrator.';
@@ -516,6 +554,7 @@
     n.households = (await nsrApi('GET', '/households')).items;
     n.deliveries = (await nsrApi('GET', '/deliveries?page_size=200')).items;
   }
+  const when = (iso) => (iso ? fmtTime(Date.parse(iso), false) : '—');
 
   function nsrView() {
     const n = UI.nsr;
@@ -523,57 +562,64 @@
     const pending = UI.unsaved.reduce((t, id) => t + savable(E.getRun(id)).length, 0);
     const queued = pending ? html`<div class="callout warn" role="status"><b>${num(pending)} uploaded records are not on the server yet.</b><div>${n.households ? 'Refresh' : 'Connect'} saves them. Reloading this page loses them.</div></div>` : '';
     const saveState = html`${queued}${UI.save && !UI.save.busy ? saveNote({ ...UI.save, error: null }) : ''}`;
-    const err = n.error ? html`${saveState}<div class="callout crit" role="alert"><b>${nsrReason(n.error.code)}</b>${n.error.details && n.error.details.length ? html`<div class="small">${n.error.details.map((d) => html`<div>${d.household_serial || ''} ${d.errors ? d.errors.map((e) => nsrReason(e.code)).join(' ') : nsrReason(d.code)}</div>`)}</div>` : ''}</div>` : saveState;
-    const connect = html`<section class="panel"><header><b>Connect</b>${n.cfg ? html`<span class="sub">${n.cfg.enabled ? 'Sending is on' : 'Sending is off: you can check households, nothing is sent'}</span>` : ''}</header><div class="body">
+    const details = n.error && n.error.details && n.error.details.length ? n.error.details : [];
+    const err = n.error ? html`${saveState}<div class="callout crit" role="alert"><b>${nsrReason(n.error.code)}</b>${details.length ? html`<div class="small">${pagedList('nsr-error', details, (d) => html`<div>${d.household_serial || ''} ${d.errors ? d.errors.map((e) => nsrReason(e.code)).join(' ') : nsrReason(d.code)}</div>`)}</div>` : ''}</div>` : saveState;
+    const connect = html`<section class="panel"><header><h3>Connect</h3>${n.cfg ? html`<span class="sub">${n.cfg.enabled ? 'Sending is on' : 'Sending is off: you can check households, nothing is sent'}</span>` : ''}</header><div class="body stack">
       <div class="filters">
         <label class="field">API key<input type="password" id="nsr-key" autocomplete="off" data-live data-bind="nsr.key" value="${n.key}"></label>
-        ${canSend ? html`<label class="field">NSR submit key<input type="password" id="nsr-submit-key" autocomplete="off" data-live data-bind="nsr.submitKey" value="${n.submitKey}"></label>
+        ${canSend ? html`<label class="field">NSIPA Registry submit key<input type="password" id="nsr-submit-key" autocomplete="off" data-live data-bind="nsr.submitKey" value="${n.submitKey}"></label>
         <label class="field">Your name or ID<input id="nsr-operator" autocomplete="off" data-live data-bind="nsr.operator" value="${n.operator}" maxlength="64"></label>` : ''}
         <button class="btn primary" data-act="nsr-connect" ${raw(n.busy || !n.key ? 'disabled' : '')}>${n.households ? 'Refresh' : 'Connect'}</button>
       </div><div class="small muted">Keys stay in this page only and are cleared when you close it.</div></div></section>`;
     if (!n.households) return html`${err}${connect}`;
 
     const ready = n.households.filter((h) => h.status === 'READY');
-    const rows = n.households.map((h) => {
-      const on = n.selected.includes(h.household_serial);
-      return html`<tr><td><input type="checkbox" aria-label="Select ${h.household_serial}" data-act="nsr-toggle" data-arg="${h.household_serial}" ${raw(on ? 'checked' : '')} ${raw(h.status === 'READY' ? '' : 'disabled')}></td>
-        <td>${h.household_serial}</td><td class="num">${num(h.members)}</td><td>${[h.lga_name, h.state_name].filter(Boolean).join(', ')}</td><td>${nsrPill(h.status)}</td>
-        <td class="small">${h.errors.length ? h.errors.map(nsrReason).join(' ') : h.latest_delivery ? html`Last sent: ${nsrPill(h.latest_delivery.status)}` : ''}</td></tr>`;
-    });
-    const pick = html`<section class="panel"><header><b>1. Select households</b><span class="sub">${num(ready.length)} of ${num(n.households.length)} ready</span>
+    const pick = html`<section class="panel"><header><h3>1. Select households</h3><span class="sub">${num(ready.length)} of ${num(n.households.length)} ready</span>
         <button class="btn" data-act="nsr-preview" ${raw(n.busy || !n.selected.length ? 'disabled' : '')}>Check Selected (${num(n.selected.length)})</button></header>
-      <div class="body flush"><div class="tbl-wrap"><table class="t"><thead><tr><th></th><th>Household</th><th>Members</th><th>Area</th><th>Status</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div></div></section>`;
+      <div class="body flush">${table({ key: 'nsr-hh', items: n.households, empty: 'No households on the server yet.', cols: [['', 48], ['Household', 190], ['Members', 100, 'num'], ['Area', 220], ['Status', 190], ['Notes', '']],
+        row: (h) => html`<tr><td><input type="checkbox" aria-label="Select ${h.household_serial}" data-act="nsr-toggle" data-arg="${h.household_serial}" ${raw(n.selected.includes(h.household_serial) ? 'checked' : '')} ${raw(h.status === 'READY' ? '' : 'disabled')}></td>
+          <td>${h.household_serial}</td><td class="num">${num(h.members)}</td><td>${[h.lga_name, h.state_name].filter(Boolean).join(', ')}</td><td>${nsrPill(h.status)}</td>
+          <td class="small">${h.errors.length ? h.errors.map(nsrReason).join(' ') : h.latest_delivery ? html`Last sent: ${nsrPill(h.latest_delivery.status)}` : ''}</td></tr>` })}</div></section>`;
 
     const p = n.preview;
-    const review = p ? html`<section class="panel"><header><b>2. Review</b>${nsrPill(p.status)}</header><div class="body stack">
-        ${p.households.map((h) => html`<div><b>${h.household_serial}</b> ${nsrPill(h.status)} <span class="small muted">${num(h.members)} member(s)</span>
+    const review = p ? html`<section class="panel"><header><h3>2. Review</h3>${nsrPill(p.status)}</header><div class="body stack">
+        ${pagedList('nsr-review', p.households, (h) => html`<div class="review-item"><b>${h.household_serial}</b> ${nsrPill(h.status)} <span class="small muted">${num(h.members)} member(s)</span>
           ${h.errors.length ? html`<ul class="small">${h.errors.map((e) => html`<li>${nsrReason(e.code)}</li>`)}</ul>` : ''}
-          ${h.warnings.length ? moreDetails(`Notes for the NSR team (${h.warnings.length})`, html`<ul class="small">${h.warnings.map((w) => html`<li>${w.field ? html`<b>${w.field}</b>: ` : ''}${w.message}</li>`)}</ul>`) : ''}</div>`)}
-        ${p.request ? moreDetails('Show the request NSR will receive', html`<dl class="kv small"><dt>Method</dt><dd>${p.request.method}</dd><dt>Address</dt><dd>${p.request.url}</dd><dt>Format</dt><dd>${p.request.format}</dd><dt>Values</dt><dd>${p.view === 'full' ? 'Shown in full (test data)' : 'Masked here; NSR receives the stored values'}</dd></dl>
+          ${h.warnings.length ? moreDetails(`Notes for the NSIPA Registry team (${h.warnings.length})`, html`<ul class="small">${h.warnings.map((w) => html`<li>${w.field ? html`<b>${w.field}</b>: ` : ''}${T.brand(w.message)}</li>`)}</ul>`) : ''}</div>`)}
+        ${p.request ? moreDetails('Show the request the NSIPA Registry will receive', html`<dl class="kv small"><dt>Method</dt><dd>${p.request.method}</dd><dt>Address</dt><dd>${p.request.url}</dd><dt>Format</dt><dd>${p.request.format}</dd><dt>Values</dt><dd>${p.view === 'full' ? 'Shown in full (test data)' : 'Masked here; the NSIPA Registry receives the stored values'}</dd></dl>
           <pre class="code">${JSON.stringify(p.request.body, null, 2)}</pre>`) : ''}
       </div></section>` : '';
 
     const sendable = p && p.status === 'READY' && n.cfg && n.cfg.enabled;
-    const send = p && canSend ? html`<section class="panel"><header><b>3. Send</b></header><div class="body stack">
+    const send = p && canSend ? html`<section class="panel"><header><h3>3. Send</h3></header><div class="body stack">
         ${!n.cfg.enabled ? html`<div class="callout warn">${nsrReason('NSR_WEBHOOK_DISABLED')}</div>` : ''}
-        <label class="row confirm"><input type="checkbox" id="nsr-confirm" data-bind="nsr.confirm" data-type="check" ${raw(n.confirm ? 'checked' : '')}> I have reviewed ${num(p.households.length)} household(s) and want to send them to the NSR Household Register.</label>
-        <div class="btns"><button class="btn primary" data-act="nsr-submit" ${dis('nsr.submit')} ${raw(!sendable || !n.confirm || n.busy || !n.submitKey || !n.operator ? 'disabled' : '')}>Send to NSR</button></div>
+        <label class="row confirm"><input type="checkbox" id="nsr-confirm" data-bind="nsr.confirm" data-type="check" ${raw(n.confirm ? 'checked' : '')}> I have reviewed ${num(p.households.length)} household(s) and want to send them to the NSIPA Registry.</label>
+        <div class="btns"><button class="btn primary" data-act="nsr-submit" ${dis('nsr.submit')} ${raw(!sendable || !n.confirm || n.busy || !n.submitKey || !n.operator ? 'disabled' : '')}>Send to NSIPA Registry</button></div>
       </div></section>` : '';
 
     const r = n.result;
     const result = r ? html`<div class="callout ${r.status === 'ACCEPTED' ? 'ok' : ['REJECTED', 'DELIVERY_FAILED'].includes(r.status) ? 'crit' : 'warn'}" role="status">
-        <b>${{ ACCEPTED: 'Sent. NSR received the message.', RETRY_SCHEDULED: 'NSR is busy. DataBridge will try again automatically.', CONFIRMATION_PENDING: 'No clear answer from NSR. Check NSR before sending again.', REJECTED: 'NSR rejected the message.', DELIVERY_FAILED: 'Not delivered.' }[r.status] || 'Sending…'}</b>
-        <div>${r.correlation_id ? html`NSR reference: <b>${r.correlation_id}</b>. ` : ''}${r.status === 'ACCEPTED' ? 'NSR adds households in the background; confirm in the Household Register.' : r.last_reason || ''}</div></div>` : '';
+        <b>${{ ACCEPTED: 'Sent. The NSIPA Registry received the message.', RETRY_SCHEDULED: 'The NSIPA Registry is busy. DataBridge will try again automatically.', CONFIRMATION_PENDING: 'No clear answer from the NSIPA Registry. Check the NSIPA Registry before sending again.', REJECTED: 'The NSIPA Registry rejected the message.', DELIVERY_FAILED: 'Not delivered.' }[r.status] || 'Sending…'}</b>
+        <div>${r.correlation_id ? html`NSIPA Registry reference: <b>${r.correlation_id}</b>. ` : ''}${r.status === 'ACCEPTED' ? 'The NSIPA Registry adds households in the background; confirm them in the registry.' : T.brand(r.last_reason || '')}</div></div>` : '';
 
-    const dl = n.deliveries || [];
-    const when = (iso) => (iso ? fmtTime(Date.parse(iso), false) : '—');
-    const deliveries = html`<section class="panel"><header><b>Send History</b><span class="sub">${num(dl.length)}${dl.length >= 200 ? ' latest' : ''}</span>${dl.length ? html`<button class="btn sm" data-act="nsr-history-csv">Download History</button>` : ''}</header><div class="body flush">${dl.length ? html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Queued</th><th>First sent</th><th>Last try</th><th>Households</th><th>Records</th><th>How</th><th>Source</th><th>By</th><th>Status</th><th>NSR reference</th><th>Tries</th><th></th></tr></thead><tbody>
-      ${dl.map((d) => html`<tr><td>${when(d.created_at)}</td><td>${when(d.first_attempt_at)}</td><td>${when(d.last_attempt_at)}</td><td class="small">${d.households.map((h) => h.household_serial).join(', ')}</td><td class="num">${num(d.record_count || 0)}</td><td>${d.origin === 'auto' ? 'Automatic' : 'Manual'}</td><td class="small">${d.source || '—'}</td><td class="small">${d.created_by}</td><td>${nsrPill(d.status)}</td><td class="small">${d.correlation_id || '—'}</td><td class="num">${num(d.attempt_count)}</td>
-        <td class="num">${['RETRY_SCHEDULED', 'DELIVERY_FAILED'].includes(d.status) && canSend ? html`<button class="btn sm" data-act="nsr-retry" data-arg="${d.id}" ${dis('nsr.submit')}>Retry</button>` : ''}
-        ${d.status === 'CONFIRMATION_PENDING' && canSend ? html`<input class="sm" placeholder="What did you check in NSR?" data-bind="nsr.notes.${d.id}" value="${n.notes[d.id] || ''}">
-          <button class="btn sm" data-act="nsr-reconcile" data-arg="${d.id}|ACCEPTED" ${dis('nsr.submit')}>Found in NSR</button><button class="btn sm" data-act="nsr-reconcile" data-arg="${d.id}|NOT_RECEIVED" ${dis('nsr.submit')}>Not in NSR</button>` : ''}</td></tr>`)}
-      </tbody></table></div>${moreDetails('Records in each send', html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Queued</th><th>Household</th><th>Records</th><th>Status</th></tr></thead><tbody>${dl.flatMap((d) => d.households.map((h) => html`<tr><td>${when(d.created_at)}</td><td class="small">${h.household_serial}</td><td class="small">${(h.record_ids || []).join(', ')}</td><td>${nsrPill(d.status)}</td></tr>`))}</tbody></table></div>`)}${moreDetails('Advanced details', html`<pre class="code">${JSON.stringify(dl.map((d) => ({ id: d.id, status: d.status, message_id: d.message_id, ack: d.ack, registry_commit: d.registry_commit, last_reason: d.last_reason, next_attempt_at: d.next_attempt_at, reconciliation: d.reconciliation })), null, 2)}</pre>`)}` : html`<div class="empty">Nothing sent yet.</div>`}</div></section>`;
-    return html`${err}${connect}${result}${pick}${review}${send}${deliveries}`;
+    return html`${err}${connect}${result}${pick}${review}${send}${sendHistory(n.deliveries || [], canSend)}`;
+  }
+
+  // Send History: newest first, 8 a page. Long household and record lists fold to two values and "+N more".
+  function sendHistory(list, canSend) {
+    const n = UI.nsr;
+    const dl = newest(list, (d) => Date.parse(d.created_at));
+    const actions = (d) => html`<td>${['RETRY_SCHEDULED', 'DELIVERY_FAILED'].includes(d.status) && canSend ? html`<button class="btn sm" data-act="nsr-retry" data-arg="${d.id}" ${dis('nsr.submit')}>Retry</button>` : ''}
+      ${d.status === 'CONFIRMATION_PENDING' && canSend ? html`<div class="btns nowrap"><input class="sm" placeholder="What did you check?" aria-label="What did you check in the NSIPA Registry?" data-bind="nsr.notes.${d.id}" value="${n.notes[d.id] || ''}">
+        <button class="btn sm" data-act="nsr-reconcile" data-arg="${d.id}|ACCEPTED" ${dis('nsr.submit')}>Found in NSIPA Registry</button><button class="btn sm" data-act="nsr-reconcile" data-arg="${d.id}|NOT_RECEIVED" ${dis('nsr.submit')}>Not in NSIPA Registry</button></div>` : ''}</td>`;
+    const sends = table({ key: 'nsr-history', items: dl, empty: 'Nothing sent yet.',
+      cols: [['Queued', 130], ['First sent', 130], ['Last try', 130], ['Households', 250], ['Records', 90, 'num'], ['How', 100], ['Source', 200], ['By', 150], ['Status', 200], ['NSIPA Registry reference', 240], ['Tries', 70, 'num'], ['', 460]],
+      row: (d) => html`<tr><td>${when(d.created_at)}</td><td>${when(d.first_attempt_at)}</td><td>${when(d.last_attempt_at)}</td>${manyCell(`hist:${d.id}`, d.households.map((h) => h.household_serial), 'small')}<td class="num">${num(d.record_count || 0)}</td><td>${d.origin === 'auto' ? 'Automatic' : 'Manual'}</td><td class="small">${d.source || '—'}</td><td class="small">${d.created_by}</td><td>${nsrPill(d.status)}</td><td class="small">${d.correlation_id || '—'}</td><td class="num">${num(d.attempt_count)}</td>${actions(d)}</tr>` });
+    const perHousehold = dl.flatMap((d) => d.households.map((h) => ({ d, h })));
+    const records = table({ key: 'nsr-history-records', items: perHousehold, cols: [['Queued', 130], ['Household', 200], ['Records', ''], ['Status', 200]],
+      row: ({ d, h }) => html`<tr><td>${when(d.created_at)}</td><td class="small">${h.household_serial}</td>${manyCell(`hist-rec:${d.id}:${h.household_serial}`, h.record_ids || [], 'small')}<td>${nsrPill(d.status)}</td></tr>` });
+    return html`<section class="panel"><header><h3>Send History</h3><span class="sub">${num(dl.length)}${dl.length >= 200 ? ' latest' : ''}</span>${dl.length ? html`<button class="btn sm" data-act="nsr-history-csv">Download History</button>` : ''}</header><div class="body flush">${sends}
+      ${dl.length ? html`<div class="body">${moreDetails('Records in each send', records)}${moreDetails('Advanced details', html`<pre class="code">${JSON.stringify(dl.map((d) => ({ id: d.id, status: d.status, message_id: d.message_id, ack: d.ack, registry_commit: d.registry_commit, last_reason: d.last_reason, next_attempt_at: d.next_attempt_at, reconciliation: d.reconciliation })), null, 2)}</pre>`)}</div>` : ''}</div></section>`;
   }
 
   // Record IDs with an open issue that needs a person. Shared by the transfer summary and its lists.
@@ -591,12 +637,10 @@
     if (['DUPLICATE_IN_BATCH', 'REJECTED_REVIEW'].includes(r.dedup.status)) return ['Skipped', ''];
     return ['Not sent', ''];
   }
-  function simpleRecords(recs, open) {
-    if (!recs.length) return html`<div class="empty">No records.</div>`;
+  function simpleRecords(recs, open, key) {
     const o = open || attentionIds();
-    return html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Record</th><th>Person</th><th>Status</th><th>Issue</th><th></th></tr></thead><tbody>
-      ${recs.slice(0, 200).map((r) => { const [l, tone] = recordState(r, o); return html`<tr><td class="small">${r.sourceRecordId}</td><td>${person(r)}</td><td><span class="pill ${tone}">${l}</span></td><td class="small">${recordIssue(r)}</td><td class="num">${recordActions(r)}</td></tr>`; })}
-      </tbody></table>${recs.length > 200 ? html`<div class="empty">First 200 of ${num(recs.length)}.</div>` : ''}</div>`;
+    return table({ key, items: recs, empty: 'No records.', cols: [['Record', 170], ['Person', 200], ['Status', 170], ['Issue', ''], ['', 210, 'num']],
+      row: (r) => { const [l, tone] = recordState(r, o); return html`<tr><td class="small">${r.sourceRecordId}</td><td>${person(r)}</td><td><span class="pill ${tone}">${l}</span></td><td class="small">${recordIssue(r)}</td><td class="num">${recordActions(r)}</td></tr>`; } });
   }
   // "Transfer completed. 48 records transferred. 2 need attention."
   function simpleResult(run, open) {
@@ -646,30 +690,27 @@
   const recordActions = (r) => html`<div class="btns" style="justify-content:flex-end">${techAllowed() ? html`<button class="btn sm ghost" data-act="lineage" data-arg="${r.id}">Lineage</button>` : ''}
     ${STUCK.includes(r.primary.status) ? html`<button class="btn sm" data-act="retry-rec" data-arg="${r.id}" ${dis('run.retry')} ${raw(r.fault && r.fault.kind === 'permanent' && r.primary.status === 'DEAD_LETTER' ? 'disabled title="Rejected by the registry. Correct at source and resend."' : '')}>Retry</button>` : ''}
     ${r.dedup.status === 'MATCH_REVIEW' ? html`<button class="btn sm" data-act="review" data-arg="${r.id}" ${dis('error.resolve')}>Review</button>` : ''}</div>`;
-  function recordsTable(recs, withSource) {
-    if (!recs.length) return html`<div class="empty">No records.</div>`;
-    return html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Record</th>${withSource ? html`<th>Source</th>` : ''}<th>Person (masked)</th><th>Validation</th><th>Registry 1</th><th>Registry 2</th><th>Detail</th><th></th></tr></thead><tbody>
-      ${recs.slice(0, 200).map((r) => html`<tr><td class="small">${r.sourceRecordId}<div class="muted">row ${r.id.slice(-4)}</div></td>${withSource ? html`<td class="small">${srcName(r.sourceId)}</td>` : ''}<td>${person(r)}</td>
+  function recordsTable(recs, withSource, key, sig) {
+    const cols = [['Record', 190]].concat(withSource ? [['Source', 200]] : [], [['Person (masked)', 190], ['Validation', 160], ['Registry 1', 160], ['Registry 2', 150], ['Detail', ''], ['', 210]]);
+    return table({ key, sig, items: recs, empty: 'No records.', cols,
+      row: (r) => html`<tr><td class="small">${r.sourceRecordId} <span class="muted">· row ${r.id.slice(-4)}</span></td>${withSource ? html`<td class="small">${srcName(r.sourceId)}</td>` : ''}<td>${person(r)}</td>
         <td>${E.classify(r) === 'INVALID' ? pill('validation', 'INVALID') : ['DUPLICATE_IN_BATCH', 'MATCH_REVIEW', 'REJECTED_REVIEW'].includes(r.dedup.status) ? pill('dedup', r.dedup.status) : pill('validation', r.validation.status)}</td>
-        <td>${pill('primary', r.primary.status)}</td><td>${pill('replica', r.replica.status)}</td><td class="small" style="max-width:280px">${recordIssue(r)}</td><td>${recordActions(r)}</td></tr>`)}
-      </tbody></table>${recs.length > 200 ? html`<div class="empty">First 200 of ${num(recs.length)}.</div>` : ''}</div>`;
+        <td>${pill('primary', r.primary.status)}</td><td>${pill('replica', r.replica.status)}</td><td class="small">${recordIssue(r)}</td><td>${recordActions(r)}</td></tr>` });
   }
   // Exceptions for one transfer, grouped by type, all states.
-  function issueSummary(errors) {
-    if (!errors.length) return html`<div class="empty"><b>No exceptions.</b></div>`;
+  function issueSummary(errors, key) {
+    if (!errors.length) return empty('No exceptions.');
     const by = {};
     errors.forEach((e) => { (by[e.code] = by[e.code] || []).push(e); });
     const state = (list) => { const c = {}; list.forEach((e) => { const l = T.recordStatus('resolution', e.resolution)[0]; c[l] = (c[l] || 0) + 1; }); return Object.entries(c).map(([l, n]) => `${n} ${l.toLowerCase()}`).join(' · '); };
-    return html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Exception</th><th class="num">Records</th><th>Status</th><th>Next step</th></tr></thead><tbody>
-      ${Object.entries(by).map(([code, list]) => { const m = T.friendlyError(code); return html`<tr><td><b>${m.title}</b><div class="small muted">${m.explain}</div></td><td class="num">${num(new Set(list.map((e) => e.recordId || e.id)).size)}</td><td class="small">${state(list)}</td><td class="small">${m.next}</td></tr>`; })}
-      </tbody></table></div>
-      <div class="body">${techDetails(errorsTechTable(errors))}</div>`;
+    return html`${table({ key, items: Object.entries(by), cols: [['Exception', ''], ['Records', 100, 'num'], ['Status', 200], ['Next step', 280]],
+      row: ([code, list]) => { const m = T.friendlyError(code); return html`<tr><td><b>${m.title}</b> <span class="small muted">· ${m.explain}</span></td><td class="num">${num(new Set(list.map((e) => e.recordId || e.id)).size)}</td><td class="small">${state(list)}</td><td class="small">${m.next}</td></tr>`; } })}
+      <div class="body">${techDetails(errorsTechTable(errors, `${key}-tech`))}</div>`;
   }
-  function errorsTechTable(list) {
-    return html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Reference</th><th>Code</th><th>Stage</th><th>Record</th><th>Detail</th><th>Retryable</th><th class="num">Retries</th><th>Resolution</th></tr></thead><tbody>
-      ${list.slice().reverse().slice(0, 300).map((e) => html`<tr><td class="mono small">${e.id}<div class="muted">${fmtTime(e.at)}</div></td><td class="mono small">${e.code}</td><td class="small mono">${e.stage}</td><td class="mono small">${e.recordId || '—'}</td>
-        <td class="small" style="max-width:320px">${e.detail}${e.field ? html`<div class="muted">field: ${e.field}</div>` : ''}<div class="muted mono">${e.traceId}</div></td><td>${e.retryable ? 'Yes' : 'No'}</td><td class="num">${e.retryCount}</td><td class="small mono">${e.resolution}${e.resolutionNote ? html`<div class="muted">${e.resolutionNote}</div>` : ''}</td></tr>`)}
-      </tbody></table></div>`;
+  function errorsTechTable(list, key, sig) {
+    return table({ key, sig, items: newest(list, (e) => e.at), cols: [['Reference', 200], ['Code', 250], ['Stage', 160], ['Record', 150], ['Detail', ''], ['Retryable', 100], ['Retries', 90, 'num'], ['Resolution', 220]],
+      row: (e) => html`<tr><td class="mono small">${e.id} <span class="muted">· ${fmtTime(e.at)}</span></td><td class="mono small">${e.code}</td><td class="small mono">${e.stage}</td><td class="mono small">${e.recordId || '—'}</td>
+        <td class="small">${T.brand(e.detail)}${e.field ? html` <span class="muted">· field: ${e.field}</span>` : ''} <span class="muted mono">· ${e.traceId}</span></td><td>${e.retryable ? 'Yes' : 'No'}</td><td class="num">${e.retryCount}</td><td class="small mono">${e.resolution}${e.resolutionNote ? html` <span class="muted">· ${e.resolutionNote}</span>` : ''}</td></tr>` });
   }
 
   function pageRun() {
@@ -684,34 +725,35 @@
     return html`${head(run.sourceName, null, actions, html`<button data-act="nav" data-arg="runs">Transfers</button>`)}
       ${resultBox(simpleResult(run, open))}
       <p class="small muted" style="margin:0">${fmtTime(run.createdAt, false)} · ${T.modeLabel(run.mode)}${run.file ? ` · ${run.file.safeName || run.file.name}` : ''} · ${num(run.records.length)} records</p>
-      ${attn.length ? html`<section class="panel"><header><h2>Needs Attention (${num(attn.length)})</h2></header>${simpleRecords(attn, open)}</section>` : ''}
-      ${run.records.length ? moreDetails(`All Records (${run.records.length})`, html`${simpleRecords(run.records, open)}<div class="btns" style="margin-top:12px"><button class="btn sm" data-act="report" data-arg="${run.id}" ${dis('report.download')}>Download Report</button></div>`) : ''}
+      ${attn.length ? html`<section class="panel"><header><h3>Needs Attention (${num(attn.length)})</h3></header>${simpleRecords(attn, open, `run-attn:${run.id}`)}</section>` : ''}
+      ${run.records.length ? moreDetails(`All Records (${run.records.length})`, html`${simpleRecords(run.records, open, `run-all:${run.id}`)}<div class="btns" style="margin-top:12px"><button class="btn sm" data-act="report" data-arg="${run.id}" ${dis('report.download')}>Download Report</button></div>`) : ''}
       ${techDetails(advancedRun(run, rc), 'Advanced Details')}`;
   }
-  // Everything the previous transfer page showed, for administrators, analysts and auditors.
+  // Everything the previous transfer page showed, for Platform Admins.
   function advancedRun(run, rc) {
     const errs = S.errors.filter((e) => e.runId === run.id);
     const tabs = [['records', `Records (${run.records.length})`], ['errors', `Exceptions (${new Set(errs.map((e) => e.code)).size})`], ['recon', 'Reconciliation'], ['attempts', 'Write attempts'], ['events', 'Events'], ['mapping', 'Mapping'], ['audit', 'Audit log']];
     let body;
     if (UI.runTab === 'records') {
       const flt = REC_FILTERS.find((x) => x[0] === UI.recFilter) || REC_FILTERS[0];
-      body = html`<div class="body"><div class="seg wrap" role="group" aria-label="Filter records">${REC_FILTERS.map(([k, l, fn]) => { const n = run.records.filter(fn).length; return k !== 'all' && !n ? '' : html`<button data-act="recfilter" data-arg="${k}" aria-pressed="${UI.recFilter === k}">${l} (${n})</button>`; })}</div></div>${recordsTable(run.records.filter(flt[2]))}`;
-    } else if (UI.runTab === 'errors') body = issueSummary(errs);
+      body = html`<div class="body"><div class="seg wrap" role="group" aria-label="Filter records">${REC_FILTERS.map(([k, l, fn]) => { const n = run.records.filter(fn).length; return k !== 'all' && !n ? '' : html`<button data-act="recfilter" data-arg="${k}" aria-pressed="${UI.recFilter === k}">${l} (${n})</button>`; })}</div></div>${recordsTable(run.records.filter(flt[2]), false, `run-records:${run.id}`, UI.recFilter)}`;
+    } else if (UI.runTab === 'errors') body = issueSummary(errs, `run-errors:${run.id}`);
     else if (UI.runTab === 'attempts') {
-      const att = run.records.flatMap((r) => r.primary.attempts.map((a) => ({ r, a }))).sort((x, y) => x.a.at - y.a.at);
+      const att = newest(run.records.flatMap((r) => r.primary.attempts.map((a) => ({ r, a }))), (x) => x.a.at);
       const shown = att.filter((x) => x.a.n > 1 || x.a.outcome !== 'ACCEPTED' || x.a.by !== 'pipeline');
       const result = (o) => ({ ACCEPTED: 'Written', RECONCILED_FOUND: 'Found on reconcile', TIMEOUT: 'Timeout', REJECTED: 'Rejected' }[o] || 'Temporary failure');
-      body = html`<div class="body"><p class="small muted" style="margin:0">Automatic retry: up to ${S.destinations[0].retry.maxAttempts} attempts. Resends never create duplicates.</p></div>
-        <div class="tbl-wrap"><table class="t"><thead><tr><th>Time</th><th>Record</th><th class="num">Attempt</th><th>Result</th><th>By</th></tr></thead><tbody>
-        ${shown.map(({ r, a }) => html`<tr><td class="small">${fmtTime(a.at)}</td><td class="small">${r.sourceRecordId}</td><td class="num">${a.n}</td><td class="small">${result(a.outcome)}</td><td class="small">${a.by === 'pipeline' ? 'Automatic' : a.by}</td></tr>`)}
-        </tbody></table><div class="empty small">${num(att.length - shown.length)} first-attempt writes hidden.</div></div>
+      body = html`<div class="body"><p class="small muted" style="margin:0">Automatic retry: up to ${S.destinations[0].retry.maxAttempts} attempts. Resends never create duplicates. ${num(att.length - shown.length)} first-attempt writes hidden.</p></div>
+        ${table({ key: `run-attempts:${run.id}`, items: shown, empty: 'No retried or failed writes.', cols: [['Time', 160], ['Record', 200], ['Attempt', 100, 'num'], ['Result', ''], ['By', 200]],
+          row: ({ r, a }) => html`<tr><td class="small">${fmtTime(a.at)}</td><td class="small">${r.sourceRecordId}</td><td class="num">${a.n}</td><td class="small">${result(a.outcome)}</td><td class="small">${a.by === 'pipeline' ? 'Automatic' : a.by}</td></tr>` })}
         <div class="body">${techDetails(html`<div class="small muted" style="margin-bottom:8px">Retry policy: ${S.destinations[0].retry.maxAttempts} attempts, exponential backoff from ${S.destinations[0].retry.baseMs / 1000} s (×${S.destinations[0].retry.factor}, cap ${S.destinations[0].retry.capMs / 1000} s), ${S.destinations[0].retry.jitter} jitter. Every attempt carries the same idempotency key.</div>
-          <div class="tbl-wrap"><table class="t"><thead><tr><th>At</th><th>Record</th><th class="num">#</th><th>Outcome</th><th class="num">HTTP</th><th class="num">Latency</th><th>Idempotency key</th><th>Note</th></tr></thead><tbody>
-          ${shown.map(({ r, a }) => html`<tr><td class="small">${fmtTime(a.at)}</td><td class="mono small">${r.id.slice(-4)}</td><td class="num">${a.n}</td><td class="mono small">${a.outcome}</td><td class="num">${a.http || '—'}</td><td class="num">${a.latencyMs} ms</td><td class="mono small">${a.idemKey.slice(0, 12)}…</td><td class="small">${a.note}</td></tr>`)}</tbody></table></div>`, 'Technical details')}</div>`;
-    } else if (UI.runTab === 'recon') body = html`<div class="body">${totalsView(rc)}</div>`;
-    else if (UI.runTab === 'events') body = html`<div class="tbl-wrap"><table class="t"><tbody>${run.events.map((e) => html`<tr><td class="small" style="width:150px">${fmtTime(e.at)}</td><td style="width:1%"><span class="pill ${e.level === 'error' ? 'crit' : e.level === 'warn' ? 'warn' : ''}">${e.level === 'error' ? 'Error' : e.level === 'warn' ? 'Warning' : 'Info'}</span></td><td>${T.scrub(e.msg)}</td></tr>`)}</tbody></table></div>`;
-    else if (UI.runTab === 'mapping') body = html`<div class="body"><p class="small muted" style="margin:0">Mapping version ${run.mappingVersion}.</p></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Source field(s)</th><th>Transform</th><th>Registry field</th></tr></thead><tbody>${run.mappingRows.map((r) => html`<tr><td class="small">${r.sources.join(' + ') || 'Constant'}</td><td>${DB.TRANSFORMS[r.op].label}${r.arg ? html` <span class="tag">${r.arg}</span>` : ''}</td><td>${fieldLabel(r.target)}</td></tr>`)}</tbody></table></div>`;
-    else body = auditTable(S.audit.filter((a) => a.target.includes(run.id)));
+          ${table({ key: `run-attempts-tech:${run.id}`, items: shown, cols: [['At', 160], ['Record', 90], ['#', 60, 'num'], ['Outcome', 190], ['HTTP', 80, 'num'], ['Latency', 100, 'num'], ['Idempotency key', 160], ['Note', '']],
+            row: ({ r, a }) => html`<tr><td class="small">${fmtTime(a.at)}</td><td class="mono small">${r.id.slice(-4)}</td><td class="num">${a.n}</td><td class="mono small">${a.outcome}</td><td class="num">${a.http || '—'}</td><td class="num">${a.latencyMs} ms</td><td class="mono small">${a.idemKey.slice(0, 12)}…</td><td class="small">${a.note}</td></tr>` })}`, 'Technical details')}</div>`;
+    } else if (UI.runTab === 'recon') body = html`<div class="body">${totalsView(rc, `run-recon:${run.id}`)}</div>`;
+    else if (UI.runTab === 'events') body = table({ key: `run-events:${run.id}`, items: newest(run.events, (e) => e.at), empty: 'No events.', cols: [['Time', 160], ['Level', 110], ['Event', '']],
+      row: (e) => html`<tr><td class="small">${fmtTime(e.at)}</td><td><span class="pill ${e.level === 'error' ? 'crit' : e.level === 'warn' ? 'warn' : ''}">${e.level === 'error' ? 'Error' : e.level === 'warn' ? 'Warning' : 'Info'}</span></td><td>${T.scrub(e.msg)}</td></tr>` });
+    else if (UI.runTab === 'mapping') body = html`<div class="body"><p class="small muted" style="margin:0">Mapping version ${run.mappingVersion}.</p></div>${table({ key: `run-mapping:${run.id}`, items: run.mappingRows, cols: [['Source field(s)', ''], ['Transform', 260], ['Registry field', 280]],
+      row: (r) => html`<tr><td class="small">${r.sources.join(' + ') || 'Constant'}</td><td>${DB.TRANSFORMS[r.op].label}${r.arg ? html` <span class="tag">${r.arg}</span>` : ''}</td><td>${fieldLabel(r.target)}</td></tr>` })}`;
+    else body = auditTable(S.audit.filter((a) => a.target.includes(run.id)), `run-audit:${run.id}`);
 
     const s = E.getSource(run.sourceId);
     const pend = rc.awaitingRetry + rc.unknown + rc.inFlight + rc.replicaPending;
@@ -726,14 +768,19 @@
           ${run.file ? html`<dt>File</dt><dd>${run.file.safeName || run.file.name} · ${(run.file.size / 1024).toFixed(1)} KB</dd>` : ''}
           <dt>Started by</dt><dd>${run.triggeredBy}</dd><dt>Approval</dt><dd>${run.approvedBy ? `${run.approvedBy}, after validation` : run.scenarioId ? 'Demo scenario' : '—'}</dd>
           <dt>Start / end</dt><dd>${fmtTime(run.startedAt)} → ${fmtTime(run.endedAt)}</dd><dt>Reference</dt><dd class="small">${run.id}</dd></dl></div>
-        <div class="c6"><table class="t"><tbody>${run.stages.map((stg) => html`<tr><td class="small">${T.STAGE_LABELS[stg.key] || label(stg.key)}</td><td>${pill('stage', stg.status)}</td><td class="small muted">${stg.startedAt ? fmtTime(stg.startedAt) : ''}</td></tr>`)}</tbody></table></div></div>
+        <div class="c6">${table({ key: `run-stages:${run.id}`, items: run.stages, cols: [['Stage', ''], ['Status', 130], ['Started', 150]],
+          row: (stg) => html`<tr><td class="small">${T.STAGE_LABELS[stg.key] || label(stg.key)}</td><td>${pill('stage', stg.status)}</td><td class="small muted">${stg.startedAt ? fmtTime(stg.startedAt) : ''}</td></tr>` })}</div></div>
         ${techDetails(html`<dl class="kv small"><dt>Run ID</dt><dd class="mono">${run.id}</dd><dt>Trace ID</dt><dd class="mono">${run.traceId}</dd><dt>Mapping</dt><dd>v${run.mappingVersion} (${run.transformVersion})</dd>
           ${run.mode === 'API' ? html`<dt>Endpoint</dt><dd class="mono">${s.method} ${s.baseUrl}${s.endpoint}</dd><dt>API calls</dt><dd>${run.apiStats.requests} requests · ${run.apiStats.pages} pages · ${run.apiStats.throttled} throttled · ${run.apiStats.timeouts} timeouts</dd>` : ''}
           ${run.file ? html`<dt>Checksum</dt><dd class="mono">sha256 ${run.file.checksum ? run.file.checksum.slice(0, 24) + '…' : '—'}</dd>` : ''}
           <dt>Batches</dt><dd>${run.batches.length ? run.batches.map((b) => `${b.id} (${b.size})`).join(', ') : '—'}</dd>${run.fatal ? html`<dt>Stopped with</dt><dd class="mono">${run.fatal.stage}: ${run.fatal.message}</dd>` : ''}</dl>
-          <table class="t"><thead><tr><th>Stage</th><th>Status</th><th>In → out</th><th>Note</th></tr></thead><tbody>${run.stages.map((stg) => html`<tr><td class="mono small">${stg.key}</td><td class="mono small">${stg.status}</td><td class="small">${stg.inCount !== null ? stg.inCount : ''}${stg.outCount !== null ? ` → ${stg.outCount}` : ''}${stg.failCount ? ` · ✕ ${stg.failCount}` : ''}</td><td class="small">${stg.note}</td></tr>`)}</tbody></table>`)}
+          ${stageTech(`run-stages-tech:${run.id}`, run.stages)}`)}
       <section class="panel"><div class="tabs" role="tablist">${tabs.map(([k, l]) => html`<button role="tab" aria-selected="${UI.runTab === k}" data-act="tab" data-arg="${k}">${l}</button>`)}</div>${body}</section></div>`;
   }
+
+  // Engine stages with their raw keys, for Technical details.
+  const stageTech = (key, stages) => table({ key, items: stages, cols: [['Stage', 190], ['Status', 120], ['In → out', 140], ['Note', '']],
+    row: (stg) => html`<tr><td class="mono small">${stg.key}</td><td class="mono small">${stg.status}</td><td class="small">${stg.inCount !== null && stg.inCount !== undefined ? stg.inCount : ''}${stg.outCount !== null && stg.outCount !== undefined ? ` → ${stg.outCount}` : ''}${stg.failCount ? ` · ✕ ${stg.failCount}` : ''}</td><td class="small">${T.brand(stg.note)}</td></tr>` });
 
   // ---------------------------------------------------------------------------
   // Exceptions
@@ -750,17 +797,15 @@
     return html`<div class="btns" style="justify-content:flex-end">${primary}
       <button class="btn sm" data-act="grp-toggle" data-arg="${g.key}" aria-expanded="${UI.errOpen === g.key}">${UI.errOpen === g.key ? 'Hide' : 'View'}</button></div>`;
   }
-  function groupRows(groups) {
-    if (!groups.length) return html`<div class="empty">None.</div>`;
-    return html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Issue</th><th>Source</th><th class="num">Records</th><th></th></tr></thead><tbody>
-      ${groups.map((g) => html`<tr class="${UI.errOpen === g.key ? 'sel' : ''}"><td><b>${g.msg.title}</b><div class="small muted">${g.msg.next}</div></td><td>${srcName(g.sourceId)}</td>
+  function groupRows(groups, key, sig) {
+    return table({ key, sig, items: groups, empty: 'None.', cols: [['Issue', ''], ['Source', 250], ['Records', 100, 'num'], ['', 230]],
+      row: (g) => html`<tr class="${UI.errOpen === g.key ? 'sel' : ''}"><td><b>${g.msg.title}</b> <span class="small muted">· ${g.msg.next}</span></td><td>${srcName(g.sourceId)}</td>
         <td class="num">${g.recordIds.size ? num(g.recordIds.size) : '—'}</td><td>${groupActions(g)}</td></tr>
         ${UI.errOpen === g.key ? html`<tr class="expand"><td colspan="4"><div class="stack">
           ${g.msg.impact ? html`<p class="small" style="margin:0">${g.msg.impact}</p>` : ''}
-          ${g.recordIds.size ? simpleRecords([...g.recordIds].map((id) => E.findRecord(id)).filter(Boolean)) : html`<div class="btns">${[...g.runIds].map((id) => html`<button class="btn sm" data-act="run" data-arg="${id}">Transfer ${fmtTime(E.getRun(id).createdAt, false)}</button>`)}</div>`}
+          ${g.recordIds.size ? simpleRecords(newest([...g.recordIds].map((id) => E.findRecord(id)).filter(Boolean), (r) => r.times && r.times.extractedAt), null, `grp:${g.key}`) : html`<div class="btns">${newest([...g.runIds], (id) => E.getRun(id).createdAt).map((id) => html`<button class="btn sm" data-act="run" data-arg="${id}">Transfer ${fmtTime(E.getRun(id).createdAt, false)}</button>`)}</div>`}
           <div class="btns">${g.runIds.size ? html`<button class="btn sm" data-act="grp-report" data-arg="${g.key}" ${dis('report.download')}>Download Report</button>` : ''}${canMarkReviewed(g) ? html`<button class="btn sm ghost" data-act="grp-ack" data-arg="${g.key}" ${dis('error.resolve')} title="Records the review. Does not correct the records.">Mark Reviewed</button>` : ''}</div>
-          ${techDetails(errorsTechTable(g.errors))}</div></td></tr>` : ''}`)}
-      </tbody></table></div>`;
+          ${techDetails(errorsTechTable(g.errors, `grp-tech:${g.key}`))}</div></td></tr>` : ''}` });
   }
 
   function pageErrors() {
@@ -769,20 +814,25 @@
     const action = all.filter((g) => g.needsUser), info = all.filter((g) => !g.needsUser);
     const recs = S.runs.flatMap((r) => r.records);
     const dead = recs.filter((r) => r.primary.status === 'DEAD_LETTER' && (!q.sourceId || r.sourceId === q.sourceId));
-    const done = S.errors.filter((e) => ['RESOLVED', 'ACKNOWLEDGED'].includes(e.resolution) && (!q.sourceId || e.sourceId === q.sourceId) && (!q.code || e.code === q.code));
+    const done = newest(S.errors.filter((e) => ['RESOLVED', 'ACKNOWLEDGED'].includes(e.resolution) && (!q.sourceId || e.sourceId === q.sourceId) && (!q.code || e.code === q.code)), (e) => e.resolvedAt || e.at);
     const retryable = recs.filter((r) => ['AWAITING_RETRY', 'UNKNOWN'].includes(r.primary.status) || (r.primary.status === 'DEAD_LETTER' && !(r.fault && r.fault.kind === 'permanent')));
     const presentCodes = [...new Set(S.errors.map((e) => e.code))];
     const tabs = [['action', `Open (${action.length})`], ['info', `Automatic (${info.length})`], ['dead', `Write failures (${dead.length})`], ['done', `Resolved (${done.length})`], ['types', 'Exception types']];
+    const sig = [q.sourceId, q.code];
+    const lastAt = (r) => { const a = r.primary.attempts[r.primary.attempts.length - 1]; return a ? a.at : 0; };
     let body;
-    if (q.tab === 'action') body = groupRows(action);
-    else if (q.tab === 'info') body = groupRows(info);
-    else if (q.tab === 'dead') body = html`${dead.length ? html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Record</th><th>Source</th><th>Person (masked)</th><th class="num">Attempts</th><th>Reason</th><th>Retryable</th><th></th></tr></thead><tbody>
-      ${dead.map((r) => { const perm = r.fault && r.fault.kind === 'permanent'; return html`<tr><td class="small">${r.sourceRecordId}</td><td class="small">${srcName(r.sourceId)}</td><td>${person(r)}</td><td class="num">${r.primary.attempts.length}</td><td class="small">${perm ? 'Rejected by registry' : 'Retries exhausted'}</td><td>${perm ? html`<span class="pill crit">No</span>` : html`<span class="pill good">Yes</span>`}</td><td>${recordActions(r)}</td></tr>`; })}
-      </tbody></table></div>
-      <div class="body">${techDetails(html`<table class="t"><thead><tr><th>Record</th><th>Run</th><th>Last response</th></tr></thead><tbody>${dead.map((r) => { const a = r.primary.attempts[r.primary.attempts.length - 1]; return html`<tr><td class="mono small">${r.id}</td><td class="mono small">${r.runId}</td><td class="small">${a.http} · ${a.note}</td></tr>`; })}</tbody></table>`)}</div>` : html`<div class="empty">No write failures.</div>`}`;
-    else if (q.tab === 'done') body = done.length ? html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Time</th><th>Source</th><th>Exception</th><th>Outcome</th><th>Note</th></tr></thead><tbody>${done.slice().reverse().slice(0, 200).map((e) => html`<tr><td class="small">${fmtTime(e.resolvedAt || e.at)}</td><td class="small">${srcName(e.sourceId)}</td><td>${T.friendlyError(e.code).title}</td><td>${pill('resolution', e.resolution)}</td><td class="small">${T.scrub(e.resolutionNote)}</td></tr>`)}</tbody></table></div><div class="body">${techDetails(errorsTechTable(done))}</div>` : html`<div class="empty">None resolved yet.</div>`;
-    else body = html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Exception</th><th>Meaning</th><th>Next step</th><th>Automatic</th><th class="num">Count</th></tr></thead><tbody>${Object.keys(DB.ERROR_TAXONOMY).map((k) => { const m = T.friendlyError(k); return html`<tr><td><b>${m.title}</b></td><td class="small">${m.explain}</td><td class="small">${m.next}</td><td>${m.auto ? 'Yes' : 'No'}</td><td class="num">${S.errors.filter((e) => e.code === k).length}</td></tr>`; })}</tbody></table></div>
-      <div class="body">${techDetails(html`<table class="t"><thead><tr><th>Code</th><th>Label</th><th>Stage</th><th>Severity</th><th>Retryable</th><th>Engine description</th></tr></thead><tbody>${Object.entries(DB.ERROR_TAXONOMY).map(([k, t]) => html`<tr><td class="mono small">${k}</td><td class="small">${T.friendlyError(k).title}</td><td class="mono small">${t.stage}</td><td class="small">${t.severity}</td><td>${t.retryable ? 'Yes' : 'No'}</td><td class="small">${t.desc}</td></tr>`)}</tbody></table>`, 'Technical details: codes')}</div>`;
+    if (q.tab === 'action') body = groupRows(action, 'err-open', sig);
+    else if (q.tab === 'info') body = groupRows(info, 'err-auto', sig);
+    else if (q.tab === 'dead') body = dead.length ? html`${table({ key: 'err-dead', sig, items: newest(dead, lastAt), cols: [['Record', 170], ['Source', 220], ['Person (masked)', 190], ['Attempts', 100, 'num'], ['Reason', ''], ['Retryable', 110], ['', 210]],
+      row: (r) => { const perm = r.fault && r.fault.kind === 'permanent'; return html`<tr><td class="small">${r.sourceRecordId}</td><td class="small">${srcName(r.sourceId)}</td><td>${person(r)}</td><td class="num">${r.primary.attempts.length}</td><td class="small">${perm ? 'Rejected by registry' : 'Retries exhausted'}</td><td>${perm ? html`<span class="pill crit">No</span>` : html`<span class="pill good">Yes</span>`}</td><td>${recordActions(r)}</td></tr>`; } })}
+      <div class="body">${techDetails(table({ key: 'err-dead-tech', sig, items: newest(dead, lastAt), cols: [['Record', 260], ['Run', 260], ['Last response', '']],
+        row: (r) => { const a = r.primary.attempts[r.primary.attempts.length - 1]; return html`<tr><td class="mono small">${r.id}</td><td class="mono small">${r.runId}</td><td class="small">${a.http} · ${a.note}</td></tr>`; } }))}</div>` : empty('No write failures.');
+    else if (q.tab === 'done') body = done.length ? html`${table({ key: 'err-done', sig, items: done, cols: [['Time', 160], ['Source', 220], ['Exception', 220], ['Outcome', 130], ['Note', '']],
+      row: (e) => html`<tr><td class="small">${fmtTime(e.resolvedAt || e.at)}</td><td class="small">${srcName(e.sourceId)}</td><td>${T.friendlyError(e.code).title}</td><td>${pill('resolution', e.resolution)}</td><td class="small">${T.scrub(e.resolutionNote)}</td></tr>` })}<div class="body">${techDetails(errorsTechTable(done, 'err-done-tech', sig))}</div>` : empty('None resolved yet.');
+    else body = html`${table({ key: 'err-types', items: Object.keys(DB.ERROR_TAXONOMY), cols: [['Exception', 220], ['Meaning', ''], ['Next step', 300], ['Automatic', 110], ['Count', 90, 'num']],
+      row: (k) => { const m = T.friendlyError(k); return html`<tr><td><b>${m.title}</b></td><td class="small">${m.explain}</td><td class="small">${m.next}</td><td>${m.auto ? 'Yes' : 'No'}</td><td class="num">${S.errors.filter((e) => e.code === k).length}</td></tr>`; } })}
+      <div class="body">${techDetails(table({ key: 'err-types-tech', items: Object.entries(DB.ERROR_TAXONOMY), cols: [['Code', 260], ['Label', 190], ['Stage', 160], ['Severity', 100], ['Retryable', 100], ['Engine description', '']],
+        row: ([k, t]) => html`<tr><td class="mono small">${k}</td><td class="small">${T.friendlyError(k).title}</td><td class="mono small">${t.stage}</td><td class="small">${t.severity}</td><td>${t.retryable ? 'Yes' : 'No'}</td><td class="small">${T.brand(t.desc)}</td></tr>` }), 'Technical details: codes')}</div>`;
     return html`${head('Exception Log', null, html`<button class="btn" data-act="retry-all" ${dis('run.retry')} ${raw(retryable.length ? '' : 'disabled title="Nothing to retry."')}>Retry all (${retryable.length})</button>`)}
       <div class="filters"><label class="field">Source<select data-change="bind" data-key="errQ.sourceId"><option value="">All</option>${S.sources.map((s) => html`<option value="${s.id}" ${raw(q.sourceId === s.id ? 'selected' : '')}>${s.name}</option>`)}</select></label>
         <label class="field">Exception<select data-change="bind" data-key="errQ.code"><option value="">All</option>${presentCodes.map((c) => html`<option value="${c}" ${raw(q.code === c ? 'selected' : '')}>${T.friendlyError(c).title}</option>`)}</select></label></div>
@@ -808,7 +858,7 @@
   ];
   const bucketIds = (rc, key) => { const t = TOTALS.find((x) => x[0] === key); return (t ? t[2] : [key]).flatMap((k) => rc.ids[k] || []); };
   const bucketCount = (rc, key) => { const t = TOTALS.find((x) => x[0] === key); return (t ? t[2] : [key]).reduce((s, k) => s + (rc[k] || 0), 0); };
-  function totalsView(rc) {
+  function totalsView(rc, key) {
     const open = UI.reconOpen;
     const v = (k) => bucketCount(rc, k);
     const notes = [];
@@ -822,9 +872,9 @@
       <div class="kpis totals">${TOTALS.map(([k, l, , d]) => html`<button class="kpi" data-tone="${k === 'added' || k === 'copied' ? 'good' : (k === 'review' || k === 'processing') && v(k) ? 'warn' : ''}" data-act="recon-open" data-arg="${k}" aria-pressed="${open === k}" ${raw(v(k) ? '' : 'disabled')}><span class="k">${l}</span><span class="v">${num(v(k))}</span><span class="d">${d}</span></button>`)}</div>
       <p class="small" style="margin:0"><b>Balance:</b> ${num(v('received'))} received = ${num(v('notSent'))} not sent + ${num(v('review'))} exceptions + ${num(v('processing'))} pending + ${num(v('added'))} written. Of ${num(v('added'))} written: ${num(rc.replicaConfirmed)} replicated, ${num(rc.replicaPending)} pending, ${num(rc.replicaFailed)} failed.</p>
       ${notes.length ? html`<div class="callout warn"><b>Open items</b><ul style="margin:6px 0 0;padding-left:18px">${notes.map((x) => html`<li>${x}</li>`)}</ul></div>` : html`<div class="callout ok">Balanced. All records accounted for.</div>`}
-      ${open ? html`<div class="panel"><header><h3>${(TOTALS.find((t) => t[0] === open) || BUCKETS.find((b) => b[0] === open) || [, open])[1]}: ${num(bucketIds(rc, open).length)}</h3><button class="btn sm" data-act="recon-open" data-arg="">Close</button></header>${recordsTable(bucketIds(rc, open).map((id) => E.findRecord(id)), true)}</div>` : ''}
-      ${moreDetails('Detailed breakdown', html`<table class="t"><thead><tr><th>Bucket</th><th class="num">Records</th><th></th></tr></thead><tbody>
-        ${BUCKETS.map(([k, l]) => html`<tr class="${open === k ? 'sel' : ''}"><td>${l}</td><td class="num">${num(rc[k])}</td><td><button class="btn sm" data-act="recon-open" data-arg="${k}" ${raw(rc[k] ? '' : 'disabled title="Empty."')}>View records</button></td></tr>`)}</tbody></table>
+      ${open ? html`<div class="panel"><header><h3>${(TOTALS.find((t) => t[0] === open) || BUCKETS.find((b) => b[0] === open) || [, open])[1]}: ${num(bucketIds(rc, open).length)}</h3><button class="btn sm" data-act="recon-open" data-arg="">Close</button></header>${recordsTable(bucketIds(rc, open).map((id) => E.findRecord(id)), true, `${key}:bucket`, open)}</div>` : ''}
+      ${moreDetails('Detailed breakdown', html`${table({ key: `${key}:buckets`, items: BUCKETS, cols: [['Bucket', ''], ['Records', 110, 'num'], ['', 160]],
+        row: ([k, l]) => html`<tr class="${open === k ? 'sel' : ''}"><td>${l}</td><td class="num">${num(rc[k])}</td><td><button class="btn sm" data-act="recon-open" data-arg="${k}" ${raw(rc[k] ? '' : 'disabled title="Empty."')}>View records</button></td></tr>` })}
         ${techDetails(html`<div class="stack small">${rc.checks.map((c) => html`<div class="spread"><span>${c.name}</span><span class="mono">${num(c.lhs)} ${c.ok ? '=' : '≠'} ${num(c.rhs)} ${c.ok ? 'ok' : 'mismatch'}</span></div>`)}</div>
           <dl class="kv small" style="margin-top:10px"><dt>SR1 acknowledged (middleware ledger)</dt><dd>${num(rc.primaryWritten)}</dd><dt>Held by SR1 (query by idempotency key, mock)</dt><dd>${num(rc.destinationCount)}</dd><dt>Confirmed on SR2</dt><dd>${num(rc.replicaConfirmed)}</dd><dt>Duplicate writes prevented</dt><dd>${num(rc.duplicatesPrevented)}</dd></dl>`, 'Technical details: identity checks')}`)}
     </div>`;
@@ -832,18 +882,19 @@
   function pageRecon() {
     const runs = UI.reconScope ? [E.getRun(UI.reconScope)] : E.filterRuns({ range: UI.filters.range });
     const rc = E.reconcileSummary(runs);
-    const need = S.runs.filter((r) => { const x = E.reconcileSummary([r]); return x.unknown || x.replicaFailed || x.destinationMismatch; });
+    const need = newest(S.runs.filter((r) => { const x = E.reconcileSummary([r]); return x.unknown || x.replicaFailed || x.destinationMismatch; }), (r) => r.createdAt);
     const why = (x) => [x.unknown ? `${x.unknown} outcome unknown` : '', x.replicaFailed ? `${x.replicaFailed} not replicated` : '', x.destinationMismatch && !x.unknown ? 'count mismatch' : ''].filter(Boolean).join(' · ');
     return html`${head('Reconciliation')}
       <div class="filters"><label class="field">Scope<select data-change="bind" data-key="reconScope"><option value="">All transfers (${({ today: 'today', '24h': '24 h', '7d': '7 days', all: 'all time' })[UI.filters.range]})</option>${S.runs.slice().reverse().map((r) => html`<option value="${r.id}" ${raw(UI.reconScope === r.id ? 'selected' : '')}>${fmtTime(r.createdAt, false)} · ${r.sourceName} · ${T.runStatus(E.runStatus(r)).label}</option>`)}</select></label></div>
-      ${need.length ? html`<section class="panel"><header><h3>Reconciliation required</h3></header><div class="body flush"><table class="t"><tbody>${need.map((r) => html`<tr><td>${r.sourceName}<div class="small muted">${fmtTime(r.createdAt, false)}</div></td><td class="small">${why(E.reconcileSummary([r]))}</td><td class="num"><div class="btns" style="justify-content:flex-end"><button class="btn sm" data-act="recon-scope" data-arg="${r.id}">View</button><button class="btn sm primary" data-act="reconcile" data-arg="${r.id}" ${dis('run.reconcile')}>Reconcile</button></div></td></tr>`)}</tbody></table></div></section>` : ''}
-      <section class="panel"><header><h3>${UI.reconScope ? `${E.getRun(UI.reconScope).sourceName} · ${fmtTime(E.getRun(UI.reconScope).createdAt, false)}` : `${runs.length} transfer(s)`}</h3>${UI.reconScope ? html`<button class="btn sm" data-act="recon-scope" data-arg="">All transfers</button>` : ''}</header><div class="body">${totalsView(rc)}</div></section>`;
+      ${need.length ? html`<section class="panel"><header><h3>Reconciliation required</h3></header><div class="body flush">${table({ key: 'recon-need', items: need, cols: [['Date', 150], ['Source', 240], ['Why', ''], ['', 220, 'num']],
+        row: (r) => html`<tr><td class="small">${fmtTime(r.createdAt, false)}</td><td>${r.sourceName}</td><td class="small">${why(E.reconcileSummary([r]))}</td><td class="num"><div class="btns" style="justify-content:flex-end"><button class="btn sm" data-act="recon-scope" data-arg="${r.id}">View</button><button class="btn sm primary" data-act="reconcile" data-arg="${r.id}" ${dis('run.reconcile')}>Reconcile</button></div></td></tr>` })}</div></section>` : ''}
+      <section class="panel"><header><h3>${UI.reconScope ? `${E.getRun(UI.reconScope).sourceName} · ${fmtTime(E.getRun(UI.reconScope).createdAt, false)}` : `${runs.length} transfer(s)`}</h3>${UI.reconScope ? html`<button class="btn sm" data-act="recon-scope" data-arg="">All transfers</button>` : ''}</header><div class="body">${totalsView(rc, `recon:${UI.reconScope}:${UI.filters.range}`)}</div></section>`;
   }
 
   // ---------------------------------------------------------------------------
   // Sources
   // ---------------------------------------------------------------------------
-  const LAYOUTS = { NASSCO_FORM_45: 'NASSCO NSR form 4.5', JOSH_V2: 'State registry v2 (assumed)', CCT_TEMPLATE_V1: 'CCT template v1' };
+  const LAYOUTS = { NASSCO_FORM_45: 'NASSCO NSIPA Registry form 4.5', JOSH_V2: 'State registry v2 (assumed)', CCT_TEMPLATE_V1: 'Template v1' };
   // Engine connection-check step names, shortened.
   const CHECK_STEPS = { 'Source enabled': 'Source enabled', 'Template registered': 'Template registered', 'Quarantine bucket writable (simulated)': 'Quarantine ready', 'Egress / SSRF policy': 'Address allowed', 'DNS + TLS 1.3 handshake (simulated)': 'Secure connection (TLS)', 'Fetch credential from vault (simulated)': 'Credentials (vault)', 'Authenticate with source': 'Authentication', 'Probe schema (1 record)': 'Schema check' };
   const checkList = (steps) => html`<ul class="checks">${steps.map(([n, ok, d]) => html`<li><span class="${ok ? 'ok-i' : 'no-i'}">${ok ? '✓' : '✕'}</span><span><b>${CHECK_STEPS[n] || n}</b>${ok ? '' : html` <span class="muted">${T.scrub(d)}</span>`}</span></li>`)}</ul>`;
@@ -852,21 +903,21 @@
     const removed = S.sources.filter((s) => s.removed);
     const sel = UI.sourceId && E.getSource(UI.sourceId);
     return html`${head('Sources', 'Credentials are stored as vault references; secrets are never shown.', html`<button class="btn primary" data-act="source-new" ${dis('source.edit')}>Add source</button>`)}
-      <section class="panel"><div class="tbl-wrap"><table class="t"><thead><tr><th>Source</th><th>Method</th><th>Health</th><th>Enabled</th><th>Last success</th><th>Last failure</th><th></th></tr></thead><tbody>
-        ${list.map((s) => html`<tr class="${UI.sourceId === s.id ? 'sel' : ''}"><td><button class="btn ghost" style="padding:0;font-weight:600" data-act="source" data-arg="${s.id}">${s.name}</button><div class="small muted">${s.type} · ${s.env}</div></td><td>${modes(s)}</td><td>${pill('health', s.enabled ? s.health : 'DISABLED')}</td>
+      <section class="panel">${table({ key: 'sources', items: list, empty: 'No sources.', cols: [['Source', 280], ['Method', 170], ['Health', 120], ['Enabled', 110], ['Last success', 130], ['Last failure', 130], ['', 480]],
+        row: (s) => html`<tr class="${UI.sourceId === s.id ? 'sel' : ''}"><td><button class="btn ghost cell-link" data-act="source" data-arg="${s.id}" title="${s.name} · ${s.type} · ${s.env}">${s.name}</button> <span class="small muted">· ${s.type} · ${s.env}</span></td><td>${modes(s)}</td><td>${pill('health', s.enabled ? s.health : 'DISABLED')}</td>
           <td><button class="btn sm" data-act="toggle-source" data-arg="${s.id}" ${dis('source.toggle')} aria-pressed="${s.enabled}">${s.enabled ? 'Disable' : 'Enable'}</button></td>
           <td class="small">${rel(s.lastSuccessAt)}</td><td class="small">${rel(s.lastFailureAt)}</td>
-          <td><div class="btns"><button class="btn sm" data-act="source-test" data-arg="${s.id}" ${dis('source.test')}>Check connection</button><button class="btn sm" data-act="source-edit" data-arg="${s.id}" ${dis('source.edit')}>Edit</button><button class="btn sm" data-act="ingest-from" data-arg="${s.id}" ${dis('run.start')}>New transfer</button><button class="btn sm danger" data-act="source-remove" data-arg="${s.id}" ${dis('source.edit')}>Remove</button></div></td></tr>`)}
-      </tbody></table></div>${removed.length ? html`<div class="body small muted">Removed (history kept): ${removed.map((s) => s.name).join(', ')}</div>` : ''}</section>
+          <td><div class="btns nowrap"><button class="btn sm" data-act="source-test" data-arg="${s.id}" ${dis('source.test')}>Check connection</button><button class="btn sm" data-act="source-edit" data-arg="${s.id}" ${dis('source.edit')}>Edit</button><button class="btn sm" data-act="ingest-from" data-arg="${s.id}" ${dis('run.start')}>New transfer</button><button class="btn sm danger" data-act="source-remove" data-arg="${s.id}" ${dis('source.edit')}>Remove</button></div></td></tr>` })}
+      ${removed.length ? html`<div class="body small muted">Removed (history kept): ${removed.map((s) => s.name).join(', ')}</div>` : ''}</section>
       ${sel ? sourceDetail(sel) : html`<div class="callout">Select a source to view details.</div>`}`;
   }
   function sourceDetail(s) {
-    const runs = S.runs.filter((r) => r.sourceId === s.id).slice().reverse();
+    const runs = newest(S.runs.filter((r) => r.sourceId === s.id), (r) => r.createdAt);
     const mp = S.mappings[s.id];
     const v = E.validateMapping(s.id);
     const t = UI.testResult && UI.testResult.sourceId === s.id ? UI.testResult : null;
-    const basic = [['Organisation', s.org], ['Description', s.description], ['Environment', s.env], ['Method', modes(s)], ['Schedule', s.frequency], ['Created', `${fmtTime(s.createdAt)} · ${s.createdBy}`], ['Updated', `${fmtTime(s.updatedAt)} · ${s.updatedBy}`]];
-    const tech = [['Source ID', s.id], ['Base URL', s.baseUrl || '—'], ['Endpoint', s.endpoint ? `${s.method} ${s.endpoint}` : '—'], ['Credential', s.authRef], ['Pagination', s.pagination], ['Incremental', s.incremental], ['Watermark', s.watermark ? fmtTime(s.watermark) : '—'], ['Import format', s.importFormat], ['Layout', LAYOUTS[s.layout] || s.layout], ['Schema version', s.schemaVersion]];
+    const basic = [['Organisation', s.org], ['Description', T.brand(s.description)], ['Environment', s.env], ['Method', modes(s)], ['Schedule', s.frequency], ['Created', `${fmtTime(s.createdAt)} · ${s.createdBy}`], ['Updated', `${fmtTime(s.updatedAt)} · ${s.updatedBy}`]];
+    const tech = [['Source ID', s.id], ['Base URL', s.baseUrl || '—'], ['Endpoint', s.endpoint ? `${s.method} ${s.endpoint}` : '—'], ['Credential', s.authRef], ['Pagination', s.pagination], ['Incremental', s.incremental], ['Watermark', s.watermark ? fmtTime(s.watermark) : '—'], ['Import format', T.brand(s.importFormat)], ['Layout', LAYOUTS[s.layout] || s.layout], ['Schema version', s.schemaVersion]];
     return html`<div class="grid">
       <section class="panel c5"><header><h3>${s.name}</h3>${s.connection === 'API' ? html`<span class="mock-tag">mock</span>` : ''}</header><div class="body"><dl class="kv">${basic.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
         ${moreDetails('Configuration', html`<dl class="kv small">${tech.map(([k, val]) => html`<dt>${k}</dt><dd class="${/URL|Credential|ID/.test(k) ? 'mono' : ''}">${val}</dd>`)}</dl>`)}</div></section>
@@ -874,7 +925,8 @@
         <section class="panel"><header><h3>Connection</h3><button class="btn sm" data-act="source-test" data-arg="${s.id}" ${dis('source.test')}>Check connection</button></header><div class="body">
           ${t ? html`<p style="margin:0 0 8px">${t.ok ? html`<span class="pill good">Connected</span>` : html`<span class="pill crit">Failed</span>`} <span class="small muted">${fmtTime(t.at)} · simulated</span></p>${moreDetails('Checks', checkList(t.steps), !t.ok)}` : html`<p class="small muted" style="margin:0">Not checked in this session.</p>`}</div></section>
         <section class="panel"><header><h3>Field mapping</h3><button class="btn sm" data-act="map-open" data-arg="${s.id}">Open</button></header><div class="body small">Version ${mp.version} · required ${v.requiredMapped}/${v.requiredTotal} ${v.ok ? html`<span class="pill good">Valid</span>` : html`<span class="pill crit">Mapping error</span>`}</div></section>
-        <section class="panel"><header><h3>Transfers</h3><span class="sub">${runs.length}</span></header><div class="body flush">${runs.length ? html`<table class="t"><tbody>${runs.slice(0, 8).map((r) => html`<tr><td class="small">${fmtTime(r.createdAt, false)}</td><td>${T.modeLabel(r.mode)}</td><td class="num small">${num(E.reconcileSummary([r]).primaryWritten)}/${num(r.records.length)} written</td><td>${pill('run', E.runStatus(r))}</td><td><button class="btn sm" data-act="run" data-arg="${r.id}">View</button></td></tr>`)}</tbody></table>` : html`<div class="empty">No transfers.</div>`}</div></section>
+        <section class="panel"><header><h3>Transfers</h3><span class="sub">${runs.length}</span></header><div class="body flush">${table({ key: `source-runs:${s.id}`, items: runs, empty: 'No transfers.', cols: [['Date', 140], ['Method', 120], ['Written', 140, 'num'], ['Status', ''], ['', 90]],
+          row: (r) => html`<tr><td class="small">${fmtTime(r.createdAt, false)}</td><td>${T.modeLabel(r.mode)}</td><td class="num small">${num(E.reconcileSummary([r]).primaryWritten)}/${num(r.records.length)} written</td><td>${pill('run', E.runStatus(r))}</td><td><button class="btn sm" data-act="run" data-arg="${r.id}">View</button></td></tr>` })}</div></section>
       </div></div>`;
   }
   function sourceForm() {
@@ -893,7 +945,7 @@
       <details class="wide more" ${raw(f._new ? 'open' : '')}><summary>Advanced</summary><div class="form more-body">
         ${inp('id', 'Source ID', 'SRC-STATE-EXAMPLE')}
         ${sel('layout', 'Source layout', Object.entries(LAYOUTS))}
-        ${f.connection === 'API' ? html`${inp('endpoint', 'Endpoint', '/v1/records')}${sel('method', 'HTTP method', [['GET', 'GET'], ['POST', 'POST']])}${inp('pagination', 'Pagination', 'cursor, page size 100')}${inp('incremental', 'Incremental fetch', 'updated_since watermark')}` : html`${inp('importFormat', 'Import format', 'CCT template v1 (.csv / .xlsx)')}`}
+        ${f.connection === 'API' ? html`${inp('endpoint', 'Endpoint', '/v1/records')}${sel('method', 'HTTP method', [['GET', 'GET'], ['POST', 'POST']])}${inp('pagination', 'Pagination', 'cursor, page size 100')}${inp('incremental', 'Incremental fetch', 'updated_since watermark')}` : html`${inp('importFormat', 'Import format', 'Template v1 (.csv / .xlsx)')}`}
         ${inp('schemaVersion', 'Schema version')}</div></details>
       <div class="wide small muted">https only; allow-listed hosts (.gov.ng, .mock.invalid). Credentials: vault references only.</div>
       ${f._error ? html`<div class="wide callout crit">${T.scrub(f._error)}</div>` : ''}</div>`;
@@ -915,11 +967,11 @@
         : html`<dt>Last sync</dt><dd>${rel(d.lastSyncAt)}</dd><dt>Replication</dt><dd>${num(m.confirmedSR2)} replicated · ${num(m.replicaPending)} pending · ${num(m.replicaFailed)} failed</dd><dt>Lag</dt><dd>${dur(m.replicationLagMs)} (threshold ${d.lagThresholdMs / 1000} s)</dd>`}
       </dl><div class="btns" style="margin-top:12px"><button class="btn sm" data-act="dest-health" data-arg="${d.id}">Check connection</button>
       ${d.role === 'PRIMARY' ? html`<button class="btn sm" data-act="dest-toggle" data-arg="${d.id}" ${dis('destination.edit')}>${d.enabled ? 'Disable' : 'Enable'}</button><label class="small row">Max attempts <select data-change="maxattempts" ${dis('destination.edit')}>${[3, 5, 8].map((n) => html`<option ${raw(d.retry.maxAttempts === n ? 'selected' : '')}>${n}</option>`)}</select></label>` : ''}</div>
-      ${techDetails(html`<dl class="kv small"><dt>ID</dt><dd class="mono">${d.id}</dd><dt>Name</dt><dd>${d.name}</dd><dt>Endpoint</dt><dd class="mono">${d.endpoint}</dd><dt>Credentials</dt><dd class="mono">${d.authRef}</dd><dt>Delivery policy</dt><dd>${d.deliveryPolicy}</dd><dt>Retry policy</dt><dd>${d.retry.maxAttempts} attempts · base ${d.retry.baseMs / 1000} s ×${d.retry.factor} · cap ${d.retry.capMs / 1000} s · ${d.retry.jitter} jitter</dd></dl>`)}</div></section>`;
+      ${techDetails(html`<dl class="kv small"><dt>ID</dt><dd class="mono">${d.id}</dd><dt>Name</dt><dd>${T.brand(d.name)}</dd><dt>Endpoint</dt><dd class="mono">${d.endpoint}</dd><dt>Credentials</dt><dd class="mono">${d.authRef}</dd><dt>Delivery policy</dt><dd>${d.deliveryPolicy}</dd><dt>Retry policy</dt><dd>${d.retry.maxAttempts} attempts · base ${d.retry.baseMs / 1000} s ×${d.retry.factor} · cap ${d.retry.capMs / 1000} s · ${d.retry.jitter} jitter</dd></dl>`)}</div></section>`;
     return html`${head('Destinations', 'Writes go to Master Registry 1 only; Master Registry 2 is verified as its replica.')}
       <div class="grid">${card(p)}${card(r)}</div>
       <div class="grid">
-        <section class="panel c6"><header><h3>Record states</h3></header><div class="body flush"><table class="t"><tbody>${stateList.map(([a, b]) => html`<tr><td><b>${a}</b></td><td class="small muted">${b}</td></tr>`)}</tbody></table></div></section>
+        <section class="panel c6"><header><h3>Record states</h3></header><div class="body flush">${table({ key: 'dest-states', items: stateList, cols: [['State', 170], ['Meaning', '']], row: ([a, b]) => html`<tr><td><b>${a}</b></td><td class="small muted">${b}</td></tr>` })}</div></section>
         <section class="panel c6"><header><h3>Delivery guarantees</h3></header><div class="body stack note">
           <p style="margin:0"><b>No duplicate writes.</b> Resends are recognised and not saved twice.</p>
           <p style="margin:0"><b>Written means confirmed.</b> Acceptance alone is not counted.</p>
@@ -940,6 +992,10 @@
   const UPLOAD_CHECKS = [[/^File name/, 'File name'], [/^Extension/, 'File type (.csv, .xlsx)'], [/^Size/, 'Size ≤ 5 MB'], [/^File signature/, 'Content matches type'], [/^MIME/, 'MIME type'], [/^Macros/, 'Formulas not executed']];
   const uploadCheckName = (n) => (UPLOAD_CHECKS.find(([re]) => re.test(n)) || [, n])[1];
   const WIZ_STEPS = ['Select Source', 'Upload or Receive', 'Review and Submit'];
+  // The picker lists NASSCO National Social Registry (SRC-LGA-UPLOAD) first, then the rest in their configured
+  // order. Only the display order changes; the sources themselves are untouched.
+  const PICKER_FIRST = 'SRC-LGA-UPLOAD';
+  const pickerOrder = (list) => list.filter((x) => x.id === PICKER_FIRST).concat(list.filter((x) => x.id !== PICKER_FIRST));
 
   function pageIngest() {
     const w = UI.wiz;
@@ -948,7 +1004,7 @@
     let body;
     if (done) body = submittedView(E.getRun(w.runId));
     else if (w.step === 1) body = html`<h2 class="q">Select Source</h2>
-      <div class="choice big">${S.sources.filter((x) => !x.removed).map((x) => html`<button data-act="wiz-source" data-arg="${x.id}" aria-pressed="${w.sourceId === x.id}" ${raw(x.enabled ? '' : 'disabled')}><b>${x.name}</b><span>${modes(x)}</span>${x.enabled ? '' : html`<span class="pill">Disabled</span>`}</button>`)}</div>`;
+      <div class="choice big">${pickerOrder(S.sources.filter((x) => !x.removed)).map((x) => html`<button data-act="wiz-source" data-arg="${x.id}" aria-pressed="${w.sourceId === x.id}" ${raw(x.enabled ? '' : 'disabled')}><b>${x.name}</b><span>${modes(x)}</span>${x.enabled ? '' : html`<span class="pill">Disabled</span>`}</button>`)}</div>`;
     else if (w.step === 2) body = html`<h2 class="q">${s.name}</h2>
       ${s.modes.length > 1 ? html`<div class="choice big">
         <button data-act="wiz-mode" data-arg="IMPORT" aria-pressed="${w.mode === 'IMPORT'}"><b>Upload File</b><span>CSV or Excel</span></button>
@@ -971,19 +1027,20 @@
       const m = T.friendlyError(code);
       return html`<h2 class="q">Review and Submit</h2><div class="callout crit result"><b>${m.title}</b><div>${m.next}</div></div>
         <div class="btns">${code === 'FIELD_MAPPING_FAILED' && E.can('mapping.edit') ? html`<button class="btn" data-act="map-open" data-arg="${w.sourceId}">Correct Mapping</button>` : ''}<button class="btn primary" data-act="wiz-step" data-arg="2">Try Again</button></div>
-        ${techDetails(html`<table class="t"><tbody>${d.stages.map((stg) => html`<tr><td class="mono small">${stg.key}</td><td class="mono small">${stg.status}</td><td class="small">${stg.note}</td></tr>`)}</tbody></table>`)}`;
+        ${techDetails(stageTech('wiz-stages-failed', d.stages))}`;
     }
     const rc = E.reconcileSummary([d]);
     const issues = d.records.filter((r) => E.classify(r) !== 'ACCEPTED');
     return html`<h2 class="q">Review and Submit</h2>
       <div class="callout ${issues.length ? 'warn' : 'ok'} result" role="status"><b>${num(rc.received)} records checked. ${num(rc.accepted)} valid.${issues.length ? ` ${num(issues.length)} need correction.` : ''}</b></div>
       ${issues.length ? html`<div class="btns"><button class="btn" data-act="wiz-issues" aria-expanded="${w.showIssues}">${w.showIssues ? 'Hide Issues' : 'View Issues'}</button>${w.showIssues ? html`<button class="btn sm ghost" data-act="wiz-report" ${dis('report.download')}>Download Report</button>` : ''}</div>
-        ${w.showIssues ? html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Record</th><th>Person</th><th>Issue</th></tr></thead><tbody>${issues.slice(0, 100).map((r) => html`<tr><td class="small">${r.sourceRecordId}</td><td>${person(r)}</td><td class="small">${recordIssue(r)}</td></tr>`)}</tbody></table></div>` : ''}
+        ${w.showIssues ? table({ key: `wiz-issues:${d.dryRunId}`, items: issues, cols: [['Record', 190], ['Person', 220], ['Issue', '']], row: (r) => html`<tr><td class="small">${r.sourceRecordId}</td><td>${person(r)}</td><td class="small">${recordIssue(r)}</td></tr>` }) : ''}
         ${rc.accepted ? html`<label class="row confirm"><input type="checkbox" id="wiz-ack" data-bind="wiz.ack" data-type="check" ${raw(w.ack ? 'checked' : '')}> Submit the ${num(rc.accepted)} valid records. ${num(issues.length)} will not be transferred.</label>` : ''}` : ''}
       ${rc.accepted ? autoSendFields() : ''}
       ${rc.accepted ? html`<div><button class="btn primary lg" data-act="wiz-start" ${dis('run.start')} ${raw(!issues.length || w.ack ? '' : 'disabled title="Tick the box above first."')}>Submit ${num(rc.accepted)} Records</button></div>` : html`<div class="callout crit">No valid records. Correct the file and try again.</div>`}
-      ${w.file && w.file.preview ? moreDetails('File Preview', html`<div class="tbl-wrap" style="max-height:320px"><table class="t"><thead><tr>${w.file.headers.map((h) => html`<th>${h}</th>`)}</tr></thead><tbody>${w.file.preview.map((r) => html`<tr>${w.file.headers.map((_, i) => { const v = r[i] === undefined ? '' : String(r[i]); return html`<td class="small ${/^[=+\-@]/.test(v) && !/^[+-]?\d/.test(v) ? 'formula' : ''}">${maskPreview(w.file.headers[i], v)}</td>`; })}</tr>`)}</tbody></table></div>`) : ''}
-      ${techDetails(html`<dl class="kv small"><dt>Validation run</dt><dd class="mono">${d.dryRunId}</dd><dt>Mapping</dt><dd>v${d.mappingVersion}</dd>${w.file && w.file.checksum ? html`<dt>Checksum</dt><dd class="mono">sha256 ${w.file.checksum.slice(0, 24)}…</dd>` : ''}</dl><table class="t"><tbody>${d.stages.map((stg) => html`<tr><td class="mono small">${stg.key}</td><td class="mono small">${stg.status}</td><td class="small">${stg.note}</td></tr>`)}</tbody></table>`)}`;
+      ${w.file && w.file.preview ? moreDetails('File Preview', table({ key: `wiz-preview:${d.dryRunId}`, items: w.file.preview, cols: w.file.headers.map((h) => [h, 150]),
+        row: (r) => html`<tr>${w.file.headers.map((_, i) => { const v = r[i] === undefined ? '' : String(r[i]); return html`<td class="small ${/^[=+\-@]/.test(v) && !/^[+-]?\d/.test(v) ? 'formula' : ''}">${maskPreview(w.file.headers[i], v)}</td>`; })}</tr>` })) : ''}
+      ${techDetails(html`<dl class="kv small"><dt>Validation run</dt><dd class="mono">${d.dryRunId}</dd><dt>Mapping</dt><dd>v${d.mappingVersion}</dd>${w.file && w.file.checksum ? html`<dt>Checksum</dt><dd class="mono">sha256 ${w.file.checksum.slice(0, 24)}…</dd>` : ''}</dl>${stageTech(`wiz-stages:${d.dryRunId}`, d.stages)}`)}`;
   }
   // After Submit: a simple progress bar, then "Transfer completed. 48 records transferred. 2 need attention."
   function submittedView(run) {
@@ -997,17 +1054,17 @@
     const attn = r.tone === 'crit' || run.records.some((x) => recordState(x, open)[0] === 'Needs Attention');
     return html`${resultBox(r)}${savePanel(run)}<div class="btns"><button class="btn" data-act="run" data-arg="${run.id}">${attn ? 'View Issues' : 'View Details'}</button><button class="btn primary lg" data-act="wiz-done">Done</button></div>`;
   }
-  // Keys stay in page memory, so an operator enters them once per page. Without all three, records wait on Send to NSR.
+  // Keys stay in page memory, so an operator enters them once per page. Without all three, records wait on Send to NSIPA Registry.
   function autoSendFields() {
     if (!E.can('nsr.submit')) return '';
     const n = UI.nsr;
-    return html`<section class="panel"><header><b>Send to NSR</b></header><div class="body stack">
-      <label class="row confirm"><input type="checkbox" id="wiz-auto" data-bind="nsr.auto" data-type="check" ${raw(n.auto ? 'checked' : '')}> Send to NSR automatically after submitting</label>
+    return html`<section class="panel"><header><h3>Send to NSIPA Registry</h3></header><div class="body stack">
+      <label class="row confirm"><input type="checkbox" id="wiz-auto" data-bind="nsr.auto" data-type="check" ${raw(n.auto ? 'checked' : '')}> Send to the NSIPA Registry automatically after submitting</label>
       ${n.auto ? html`<div class="filters">
         <label class="field">API key<input type="password" id="wiz-send-key" autocomplete="off" data-live data-bind="nsr.key" value="${n.key}"></label>
-        <label class="field">NSR submit key<input type="password" id="wiz-send-submit-key" autocomplete="off" data-live data-bind="nsr.submitKey" value="${n.submitKey}"></label>
+        <label class="field">NSIPA Registry submit key<input type="password" id="wiz-send-submit-key" autocomplete="off" data-live data-bind="nsr.submitKey" value="${n.submitKey}"></label>
         <label class="field">Your name or ID<input id="wiz-send-operator" autocomplete="off" data-live data-bind="nsr.operator" value="${n.operator}" maxlength="64"></label>
-      </div><div class="small muted">Valid households go to NSR with no further check. Keys stay in this page only.${autoReady() ? '' : ' Without all three, records wait for you on Send to NSR.'}</div>` : ''}
+      </div><div class="small muted">Valid households go to the NSIPA Registry with no further check. Keys stay in this page only.${autoReady() ? '' : ' Without all three, records wait for you on Send to NSIPA Registry.'}</div>` : ''}
     </div></section>`;
   }
   const autoReady = () => { const n = UI.nsr; return n.auto && n.key && n.submitKey && n.operator && E.can('nsr.submit'); };
@@ -1024,29 +1081,29 @@
     render();
   }
   function autoNote(a) {
-    if (a.busy) return html`<div class="callout info" role="status"><b>Queuing for NSR…</b></div>`;
+    if (a.busy) return html`<div class="callout info" role="status"><b>Queuing for the NSIPA Registry…</b></div>`;
     return html`${a.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(a.error)}</b></div>` : ''}
-      ${a.queued_households ? html`<div class="callout ok" role="status"><b>${num(a.queued_households)} households queued for NSR in ${num(a.deliveries.length)} ${a.deliveries.length === 1 ? 'send' : 'sends'}.</b><div>They go in the background, so you can close this page. Follow them in Send History.</div></div>` : ''}
-      ${a.skipped.length ? html`<div class="callout warn" role="status"><b>${num(a.skipped.length)} households not sent.</b><ul class="small">${a.skipped.slice(0, 20).map((s) => html`<li>${s.household_serial}: ${s.codes.map(nsrReason).join(' ')}</li>`)}</ul></div>` : ''}`;
+      ${a.queued_households ? html`<div class="callout ok" role="status"><b>${num(a.queued_households)} households queued for the NSIPA Registry in ${num(a.deliveries.length)} ${a.deliveries.length === 1 ? 'send' : 'sends'}.</b><div>They go in the background, so you can close this page. Follow them in Send History.</div></div>` : ''}
+      ${a.skipped.length ? html`<div class="callout warn" role="status"><b>${num(a.skipped.length)} households not sent.</b><ul class="small">${pagedList(`auto-skipped:${a.runId}`, a.skipped, (s) => html`<li>${s.household_serial}: ${s.codes.map(nsrReason).join(' ')}</li>`)}</ul></div>` : ''}`;
   }
-  // Transfers run in this browser only. Send to NSR reads the server, so processed records are saved there explicitly.
+  // Transfers run in this browser only. Send to NSIPA Registry reads the server, so processed records are saved there explicitly.
   const savable = (run) => run.records.filter((r) => r.primary.masterId);
   function savePanel(run) {
     const count = savable(run).length;
     if (!count || !E.can('run.start')) return '';
     const s = UI.save && UI.save.runId === run.id ? UI.save : null;
     const saved = s && !s.busy && s.done > 0;
-    return html`<section class="panel"><header><b>Save for Send to NSR</b></header><div class="body stack">
-      <p style="margin:0">${num(count)} records are ready. Save them here, or connect on Send to NSR.</p>
+    return html`<section class="panel"><header><h3>Save for Send to NSIPA Registry</h3></header><div class="body stack">
+      <p style="margin:0">${num(count)} records are ready. Save them here, or connect on Send to NSIPA Registry.</p>
       <label class="field">API key<input type="password" id="wiz-api-key" autocomplete="off" data-live data-bind="nsr.key" value="${UI.nsr.key}"></label>
       ${s ? saveNote(s) : ''}
       ${UI.autoSend && UI.autoSend.runId === run.id ? autoNote(UI.autoSend) : ''}
       <div class="btns"><button class="btn primary" data-act="wiz-save" ${raw(!UI.nsr.key || (s && s.busy) ? 'disabled' : '')}>${s && s.busy ? `Saving ${num(s.done)} of ${num(s.total)}` : 'Save to Server'}</button>
-      ${saved && E.can('nsr.preview') ? html`<button class="btn" data-act="wiz-open-nsr">Open Send to NSR</button>` : ''}</div></div></section>`;
+      ${saved && E.can('nsr.preview') ? html`<button class="btn" data-act="wiz-open-nsr">Open Send to NSIPA Registry</button>` : ''}</div></div></section>`;
   }
   function saveNote(s) {
     return html`${s.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(s.error)}</b></div>` : ''}
-      ${s.failed.length ? html`<div class="callout crit" role="alert"><b>${num(s.failed.length)} records were not saved.</b><ul class="small">${s.failed.slice(0, 20).map((f) => html`<li>${f}</li>`)}</ul></div>` : ''}
+      ${s.failed.length ? html`<div class="callout crit" role="alert"><b>${num(s.failed.length)} records were not saved.</b><ul class="small">${pagedList(`save-failed:${s.runId}`, s.failed, (f) => html`<li>${T.brand(f)}</li>`)}</ul></div>` : ''}
       ${!s.busy && s.done > 0 ? html`<div class="callout ok" role="status"><b>${num(s.done)} of ${num(s.total)} records saved.</b></div>` : ''}`;
   }
   // One request per record, the API's limit. Saving again is safe: an unchanged record stays as it is.
@@ -1080,7 +1137,7 @@
     return html`<div class="drop" id="drop"><p style="margin:0 0 12px"><b>Drop a CSV or Excel file here</b></p><label class="btn primary lg" for="wiz-file">Choose File</label><input type="file" id="wiz-file" accept=".csv,.xlsx" hidden>
         <div class="btns" style="justify-content:center;margin-top:12px"><button class="btn sm ghost" data-act="template">Download Template</button></div></div>
       ${u && !u.ok ? html`<div class="callout crit result"><b>File not accepted</b><div>${u.checks.filter((c) => !c.ok).map((c) => uploadCheckName(c.name)).join(', ')}. ${T.friendlyError('FILE_FORMAT_INVALID').next}</div></div>` : ''}
-      ${moreDetails('Demo Files', html`<div class="btns"><button class="btn sm" data-act="wiz-sample" data-arg="good">Valid</button><button class="btn sm" data-act="wiz-sample" data-arg="duplicates">Duplicates</button><button class="btn sm" data-act="wiz-sample" data-arg="drift">Schema mismatch</button><button class="btn sm" data-act="wiz-sample" data-arg="malicious">Malicious</button></div>`)}`;
+      ${moreDetails('Sample Files', html`<div class="btns"><button class="btn sm" data-act="wiz-sample" data-arg="good">Valid</button><button class="btn sm" data-act="wiz-sample" data-arg="duplicates">Duplicates</button><button class="btn sm" data-act="wiz-sample" data-arg="drift">Schema mismatch</button><button class="btn sm" data-act="wiz-sample" data-arg="malicious">Malicious</button></div>`)}`;
   }
   const maskPreview = (h, v) => (FIELD[h] && /^High/.test(FIELD[h].sensitivity) && v ? maskVal(h, v) : v);
   function scenarioLab() {
@@ -1124,15 +1181,14 @@
     if (UI.mapTab === 'mapping') body = html`<div class="body stack">${mappingSummary(v)}
         ${v.errors.filter((e) => e.row !== null).length ? html`<div class="callout crit small"><b>Mapping errors</b>${v.errors.filter((e) => e.row !== null).map((e) => html`<div>Row ${e.row + 1}: ${T.scrub(e.msg)}</div>`)}</div>` : ''}</div>
       <datalist id="src-fields">${srcFields.map((f) => html`<option value="${f}"></option>`)}</datalist>
-      <div class="tbl-wrap"><table class="t"><thead><tr><th>#</th><th>Source field(s)</th><th></th><th>Transform</th><th>Argument</th><th></th><th>Registry field</th><th>Required</th><th></th></tr></thead><tbody>
-        ${rows.map((r, i) => { const f = FIELD[r.target]; const t = DB.TRANSFORMS[r.op]; return html`<tr class="map-row ${rowErr.has(i) ? 'err' : ''}"><td class="small muted">${i + 1}</td>
-          <td style="min-width:160px"><input type="text" id="mr-${i}-s" list="src-fields" data-bind="mapDraft.rows.${i}.sources" data-type="list" data-rerender value="${r.sources.join(', ')}" placeholder="${r.op === 'constant' ? '(none)' : 'field'}"></td><td class="map-arrow">→</td>
-          <td style="min-width:170px"><select id="mr-${i}-o" data-bind="mapDraft.rows.${i}.op" data-rerender>${Object.entries(DB.TRANSFORMS).map(([k, x]) => html`<option value="${k}" ${raw(r.op === k ? 'selected' : '')}>${x.label}</option>`)}</select></td>
-          <td style="min-width:130px">${t && t.arg ? html`<input type="text" id="mr-${i}-a" data-bind="mapDraft.rows.${i}.arg" data-rerender value="${r.arg || ''}" placeholder="${t.arg}">` : html`<span class="muted small">—</span>`}</td><td class="map-arrow">→</td>
-          <td style="min-width:190px"><select id="mr-${i}-t" data-bind="mapDraft.rows.${i}.target" data-rerender><option value="">Select field…</option>${targets.map((x) => html`<option value="${x.name}" ${raw(r.target === x.name ? 'selected' : '')}>${x.label} (${x.name})</option>`)}</select></td>
+      ${table({ key: `map-rows:${sid}`, items: rows.map((r, i) => ({ r, i })), empty: 'No mapping rows.', cols: [['#', 50], ['Source field(s)', 200], ['', 36], ['Transform', 210], ['Argument', 170], ['', 36], ['Registry field', 260], ['Required', 120], ['', 60]],
+        row: ({ r, i }) => { const f = FIELD[r.target]; const t = DB.TRANSFORMS[r.op]; return html`<tr class="map-row ${rowErr.has(i) ? 'err' : ''}"><td class="small muted">${i + 1}</td>
+          <td><input type="text" id="mr-${i}-s" list="src-fields" data-bind="mapDraft.rows.${i}.sources" data-type="list" data-rerender value="${r.sources.join(', ')}" placeholder="${r.op === 'constant' ? '(none)' : 'field'}"></td><td class="map-arrow">→</td>
+          <td><select id="mr-${i}-o" data-bind="mapDraft.rows.${i}.op" data-rerender>${Object.entries(DB.TRANSFORMS).map(([k, x]) => html`<option value="${k}" ${raw(r.op === k ? 'selected' : '')}>${x.label}</option>`)}</select></td>
+          <td>${t && t.arg ? html`<input type="text" id="mr-${i}-a" data-bind="mapDraft.rows.${i}.arg" data-rerender value="${r.arg || ''}" placeholder="${t.arg}">` : html`<span class="muted small">—</span>`}</td><td class="map-arrow">→</td>
+          <td><select id="mr-${i}-t" data-bind="mapDraft.rows.${i}.target" data-rerender><option value="">Select field…</option>${targets.map((x) => html`<option value="${x.name}" ${raw(r.target === x.name ? 'selected' : '')}>${T.brand(x.label)} (${x.name})</option>`)}</select></td>
           <td>${f ? html`<span class="pill ${f.mandatory === 'Yes' ? 'crit' : f.mandatory === 'Conditional' ? 'warn' : ''}">${f.mandatory === 'Yes' ? 'Required' : f.mandatory === 'Conditional' ? 'Sometimes' : 'Optional'}</span>` : ''}</td>
-          <td><button class="btn sm ghost" data-act="map-del" data-arg="${i}" ${dis('mapping.edit')} title="Remove this row" aria-label="Remove row ${i + 1}">✕</button></td></tr>`; })}
-      </tbody></table></div>
+          <td><button class="btn sm ghost" data-act="map-del" data-arg="${i}" ${dis('mapping.edit')} title="Remove this row" aria-label="Remove row ${i + 1}">✕</button></td></tr>`; } })}
       <div class="body btns"><button class="btn" data-act="map-add" ${dis('mapping.edit')}>Add row</button><button class="btn" data-act="map-test">Test sample</button><button class="btn" data-act="map-revert" ${raw(dirty ? '' : 'disabled title="No changes."')}>Discard changes</button>
         <input type="text" id="map-note" data-bind="mapNote" value="${UI.mapNote}" placeholder="Change note (required)" style="min-width:240px" aria-label="Change note">
         <button class="btn primary" data-act="map-publish" ${dis('mapping.edit')} ${raw(dirty && v.ok && UI.mapNote.trim() ? '' : `disabled title="${esc(!dirty ? 'No changes.' : !v.ok ? 'Fix mapping errors first.' : 'Add a change note.')}"`)}>Publish v${mp.version + 1}</button>
@@ -1140,8 +1196,9 @@
       ${UI.mapTest ? html`<div class="body stack">${UI.mapTest.issues.filter((x) => x.severity === 'ERROR').length ? html`<div class="callout crit small"><b>Sample failed validation.</b>${UI.mapTest.issues.map((x) => html`<div>${issueText(x)}</div>`)}</div>` : html`<div class="callout ok small"><b>Sample valid.</b>${UI.mapTest.issues.map((x) => html`<div>${issueText(x)}</div>`)}</div>`}
         ${techDetails(html`<div class="grid"><div class="c6"><h4 style="margin:0 0 6px">Sample source record <span class="small muted">(synthetic)</span></h4><pre class="code">${JSON.stringify(UI.mapTest.payload, null, 2)}</pre></div><div class="c6"><h4 style="margin:0 0 6px">Registry record produced</h4>${UI.mapTest.issues.length ? html`<div class="small mono" style="margin-bottom:6px">${UI.mapTest.issues.map((x) => html`<div>${x.code}: ${x.message}</div>`)}</div>` : ''}<pre class="code">${JSON.stringify(UI.mapTest.canonical, null, 2)}</pre></div></div>`, 'Technical details: sample payload')}</div>` : ''}`;
     else if (UI.mapTab === 'schema') body = schemaTable(new Set(rows.map((r) => r.target)));
-    else body = html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Version</th><th>Published</th><th>By</th><th>Note</th></tr></thead><tbody>${mp.history.slice().reverse().map((h) => html`<tr><td>v${h.version}${h.version === mp.version ? html` <span class="pill good">Live</span>` : ''}</td><td class="small">${fmtTime(h.at)}</td><td class="small">${h.by}</td><td>${h.note}</td></tr>`)}</tbody></table></div>`;
-    return html`${head('Field mapping', html`Schema: ${SCHEMA.fields.length} fields from the NSR build sheet (draft, not an approved standard).`)}
+    else body = table({ key: `map-versions:${sid}`, items: newest(mp.history, (h) => h.at), cols: [['Version', 130], ['Published', 160], ['By', 220], ['Note', '']],
+      row: (h) => html`<tr><td>v${h.version}${h.version === mp.version ? html` <span class="pill good">Live</span>` : ''}</td><td class="small">${fmtTime(h.at)}</td><td class="small">${h.by}</td><td>${h.note}</td></tr>` });
+    return html`${head('Field mapping', html`Schema: ${SCHEMA.fields.length} fields from the NSIPA Registry build sheet (draft, not an approved standard).`)}
       <div class="filters"><label class="field">Source<select data-change="map-source">${S.sources.filter((x) => !x.removed).map((x) => html`<option value="${x.id}" ${raw(sid === x.id ? 'selected' : '')}>${x.name}</option>`)}</select></label>
         <div class="small"><span class="muted">Layout</span> ${LAYOUTS[s.layout]} · <span class="muted">fields</span> ${srcFields.length} · <span class="muted">v${mp.version}</span> ${fmtTime(mp.publishedAt)}</div>
         <div class="small" style="margin-left:auto"><span class="pill ${SCHEMA.fields.length === SCHEMA.fieldCount ? 'good' : 'crit'}">${SCHEMA.fields.length} fields verified</span></div></div>
@@ -1153,18 +1210,17 @@
     SCHEMA.fields.forEach((f) => { groups[f.object] = groups[f.object] || {}; groups[f.object][f.group] = (groups[f.object][f.group] || 0) + 1; });
     const list = SCHEMA.fields.filter((f) => (!q.object || f.object === q.object) && (!q.mandatory || f.mandatory === q.mandatory) && (!q.fill || f.fill === q.fill) && (!q.sens || (q.sens === 'pii' ? f.pii : q.sens === 'special' ? f.sensitivePersonal : !f.pii)) && (!q.q || (f.name + ' ' + f.label + ' ' + f.group + ' ' + f.nsrSource).toLowerCase().includes(q.q.toLowerCase())));
     return html`<div class="body stack"><div class="row small">${Object.entries(groups).map(([o, g]) => html`<span><b>${o}</b> ${Object.values(g).reduce((a, b) => a + b, 0)} <span class="muted">(${Object.entries(g).map(([k, v]) => `${k} ${v}`).join(' · ')})</span></span>`)}</div>
-      <div class="filters" style="padding:0;border:0"><label class="field">Search<input type="search" id="schema-q" data-bind="schemaQ.q" data-live value="${q.q}" placeholder="Field, label or NSR question"></label>
+      <div class="filters" style="padding:0;border:0"><label class="field">Search<input type="search" id="schema-q" data-bind="schemaQ.q" data-live value="${q.q}" placeholder="Field, label or NSIPA Registry question"></label>
         <label class="field">Object<select data-change="bind" data-key="schemaQ.object"><option value="">All</option>${['System', 'Household', 'Individual'].map((o) => html`<option ${raw(q.object === o ? 'selected' : '')}>${o}</option>`)}</select></label>
         <label class="field">Required<select data-change="bind" data-key="schemaQ.mandatory"><option value="">Any</option>${[['Yes', 'Required'], ['Conditional', 'Sometimes'], ['No', 'Optional']].map(([o, l]) => html`<option value="${o}" ${raw(q.mandatory === o ? 'selected' : '')}>${l}</option>`)}</select></label>
         <label class="field">Filled by<select data-change="bind" data-key="schemaQ.fill"><option value="">Any</option>${[['source', 'Source'], ['derived', 'Derived'], ['system', 'System']].map(([o, l]) => html`<option value="${o}" ${raw(q.fill === o ? 'selected' : '')}>${l}</option>`)}</select></label>
         <label class="field">Sensitivity<select data-change="bind" data-key="schemaQ.sens"><option value="">Any</option><option value="pii" ${raw(q.sens === 'pii' ? 'selected' : '')}>Personal data</option><option value="special" ${raw(q.sens === 'special' ? 'selected' : '')}>Sensitive (health, religion)</option><option value="low" ${raw(q.sens === 'low' ? 'selected' : '')}>Not personal</option></select></label>
         <span class="small muted">${list.length} of ${SCHEMA.fields.length}</span></div></div>
-      <div class="tbl-wrap" style="max-height:620px"><table class="t"><thead><tr><th>Field</th><th>Object</th><th>Type</th><th>Required</th><th>Match key</th><th>Sensitivity</th><th>Filled by</th><th>Mapped</th>${techAllowed() ? html`<th>Rule</th><th>Masking</th>` : ''}<th>NSR source</th></tr></thead><tbody>
-      ${list.map((f) => html`<tr><td>${f.label}<div class="small muted mono">${f.name}</div></td><td class="small">${f.object}<div class="muted">${f.group} · ${f.phase}</div></td><td class="small">${f.type}${f.codeList ? html`<div class="muted">options: ${f.codeList}</div>` : ''}</td>
-        <td><span class="pill ${f.mandatory === 'Yes' ? 'crit' : f.mandatory === 'Conditional' ? 'warn' : ''}">${f.mandatory === 'Yes' ? 'Required' : f.mandatory === 'Conditional' ? 'Sometimes' : 'Optional'}</span></td><td>${f.matchKey ? 'Proposed' : ''}</td><td class="small">${f.sensitivity}${f.sensitivePersonal ? html`<div><span class="pill crit">Special category</span></div>` : f.pii ? html`<div><span class="pill warn">Personal</span></div>` : ''}</td>
+      ${table({ key: 'schema', sig: q, items: list, empty: 'No fields match.', cols: [['Field', 280], ['Object', 220], ['Type', 220], ['Required', 120], ['Match key', 110], ['Sensitivity', 240], ['Filled by', 110], ['Mapped', 90]].concat(techAllowed() ? [['Rule', 220], ['Masking', 200]] : [], [['NSIPA Registry source', 280]]),
+        row: (f) => html`<tr><td>${T.brand(f.label)} <span class="small muted mono">· ${f.name}</span></td><td class="small">${f.object} <span class="muted">· ${T.brand(f.group)} · ${f.phase}</span></td><td class="small">${f.type}${f.codeList ? html` <span class="muted">· options: ${f.codeList}</span>` : ''}</td>
+        <td><span class="pill ${f.mandatory === 'Yes' ? 'crit' : f.mandatory === 'Conditional' ? 'warn' : ''}">${f.mandatory === 'Yes' ? 'Required' : f.mandatory === 'Conditional' ? 'Sometimes' : 'Optional'}</span></td><td>${f.matchKey ? 'Proposed' : ''}</td><td class="small">${f.sensitivity}${f.sensitivePersonal ? html` <span class="pill crit">Special category</span>` : f.pii ? html` <span class="pill warn">Personal</span>` : ''}</td>
         <td class="small">${{ source: 'Source', derived: 'Derived', system: 'System' }[f.fill] || f.fill}</td><td>${f.fill !== 'source' ? html`<span class="muted small">n/a</span>` : mapped.has(f.name) ? html`<span class="ok-i" aria-label="Matched">✓</span>` : f.mandatory === 'Yes' ? html`<span class="no-i" aria-label="Not matched">✕</span>` : html`<span class="muted">—</span>`}</td>
-        ${techAllowed() ? html`<td class="small mono" style="max-width:220px">${f.validation}</td><td class="small" style="max-width:200px">${f.masking}</td>` : ''}<td class="small">${f.nsrSource}</td></tr>`)}
-      </tbody></table></div>`;
+        ${techAllowed() ? html`<td class="small mono">${f.validation}</td><td class="small">${f.masking}</td>` : ''}<td class="small">${T.brand(f.nsrSource)}</td></tr>` })}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -1184,9 +1240,8 @@
     const sel = bySrc[sid];
     return html`${head('Data quality', 'Validation results by source for the selected period.')}
       ${filterBar(UI.filters, 'filters')}
-      <section class="panel"><header><h3>Validity by source</h3></header><div class="tbl-wrap"><table class="t"><thead><tr><th>Source</th><th class="num">Received</th><th class="num">Valid</th><th class="num">Validity</th><th class="num">Warnings</th><th>Top failing fields</th></tr></thead><tbody>
-        ${Object.entries(bySrc).map(([id, x]) => html`<tr><td>${srcName(id)}</td><td class="num">${num(x.n)}</td><td class="num">${num(x.valid)}</td><td class="num">${pct(x.valid / x.n)}</td><td class="num">${num(x.warn)}</td><td class="small">${Object.entries(x.fields).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([f, n]) => `${fieldLabel(f)} (${n})`).join(', ') || '—'}</td></tr>`)}
-      </tbody></table></div>${Object.keys(bySrc).length ? '' : html`<div class="empty">No records.</div>`}</section>
+      <section class="panel"><header><h3>Validity by source</h3></header>${table({ key: 'quality', sig: UI.filters, items: Object.entries(bySrc), empty: 'No records.', cols: [['Source', 260], ['Received', 110, 'num'], ['Valid', 100, 'num'], ['Validity', 100, 'num'], ['Warnings', 110, 'num'], ['Top failing fields', '']],
+        row: ([id, x]) => html`<tr><td>${srcName(id)}</td><td class="num">${num(x.n)}</td><td class="num">${num(x.valid)}</td><td class="num">${pct(x.valid / x.n)}</td><td class="num">${num(x.warn)}</td><td class="small">${Object.entries(x.fields).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([f, n]) => `${fieldLabel(f)} (${n})`).join(', ') || '—'}</td></tr>` })}</section>
       ${analyticsPanels(UI.filters)}
       ${sel ? html`<section class="panel"><header><h3>Field completeness: ${srcName(sid)}</h3><span class="sub">Mapped fields</span></header><div class="body">
         ${hbars(Object.entries(sel.complete).sort((a, b) => a[1] - b[1]).map(([f, n]) => ({ label: fieldLabel(f), sub: FIELD[f] && FIELD[f].mandatory === 'Yes' ? 'required' : FIELD[f] && FIELD[f].mandatory === 'Conditional' ? 'conditional' : '', segs: [{ name: 'Complete', color: FIELD[f] && FIELD[f].mandatory === 'Yes' ? C.s1 : C.s3, v: n / sel.n }], value: pct(n / sel.n, 0) })), { max: 1, fmt: (v) => pct(v) })}
@@ -1200,10 +1255,12 @@
     const q = UI.lineQ.trim().toLowerCase();
     const all = S.runs.flatMap((r) => r.records);
     if (!UI.recordId) {
-      const hits = q ? all.filter((r) => [r.id, r.sourceRecordId, r.primary.masterId, r.idemKey].some((x) => x && x.toLowerCase().includes(q))).slice(0, 40) : all.filter((r) => r.primary.status !== 'WRITTEN' || r.replica.status !== 'CONFIRMED').slice(-20).reverse();
+      const at = (r) => (r.times && r.times.extractedAt) || E.getRun(r.runId).createdAt;
+      const hits = newest(q ? all.filter((r) => [r.id, r.sourceRecordId, r.primary.masterId, r.idemKey].some((x) => x && x.toLowerCase().includes(q))) : all.filter((r) => r.primary.status !== 'WRITTEN' || r.replica.status !== 'CONFIRMED'), at);
       return html`${head('Data lineage', 'Trace a record from source to both master registries.')}
         <div class="filters"><label class="field" style="flex:1">Search<input type="search" id="line-q" data-bind="lineQ" data-live value="${UI.lineQ}" placeholder="Source reference or master record ID"></label></div>
-        <section class="panel"><header><h3>${q ? `${hits.length} result(s)` : 'Recent incomplete records'}</h3></header><div class="tbl-wrap"><table class="t"><tbody>${hits.map((r) => html`<tr><td class="small">${r.sourceRecordId}<div class="muted">${srcName(r.sourceId)}</div></td><td>${person(r)}</td><td>${pill('primary', r.primary.status)}</td><td>${pill('replica', r.replica.status)}</td><td><button class="btn sm" data-act="lineage" data-arg="${r.id}">Lineage</button></td></tr>`)}</tbody></table>${hits.length ? '' : html`<div class="empty">No records found.</div>`}</div></section>`;
+        <section class="panel"><header><h3>${q ? `${hits.length} result(s)` : 'Incomplete records'}</h3></header>${table({ key: 'lineage', sig: q, items: hits, empty: 'No records found.', cols: [['Record', 190], ['Source', 230], ['Person (masked)', ''], ['Registry 1', 170], ['Registry 2', 150], ['', 110]],
+          row: (r) => html`<tr><td class="small">${r.sourceRecordId}</td><td class="small muted">${srcName(r.sourceId)}</td><td>${person(r)}</td><td>${pill('primary', r.primary.status)}</td><td>${pill('replica', r.replica.status)}</td><td><button class="btn sm" data-act="lineage" data-arg="${r.id}">Lineage</button></td></tr>` })}</section>`;
     }
     const L = E.lineage(UI.recordId);
     const r = L.record;
@@ -1232,29 +1289,31 @@
         <div class="c6 stack">
           ${r.validation.issues.length ? html`<section class="panel"><header><h3>Validation</h3></header><div class="body small stack">${r.validation.issues.map((i) => html`<div><span class="pill ${i.severity === 'ERROR' ? 'crit' : 'warn'}">${i.severity === 'ERROR' ? 'Error' : 'Warning'}</span> ${issueText(i)}</div>`)}
             ${techDetails(html`${r.validation.issues.map((i) => html`<div class="mono">${i.code} · ${i.field} · ${i.message}</div>`)}`)}</div></section>` : ''}
-          <section class="panel"><header><h3>Write attempts</h3></header><div class="body flush">${r.primary.attempts.length ? html`<table class="t"><tbody>${r.primary.attempts.map((a) => html`<tr><td class="num">#${a.n}</td><td class="small">${fmtTime(a.at)}</td><td class="small">${result(a.outcome)}</td><td class="small muted">${a.by === 'pipeline' ? 'Automatic' : a.by}</td></tr>`)}</tbody></table>
-            <div class="body">${techDetails(html`<table class="t"><tbody>${r.primary.attempts.map((a) => html`<tr><td class="num">#${a.n}</td><td class="mono small">${a.outcome}</td><td class="small">${a.http || ''}</td><td class="small">${a.note}</td><td class="mono small">${a.idemKey.slice(0, 12)}…</td></tr>`)}</tbody></table>`)}</div>` : html`<div class="empty">Not sent.</div>`}</div></section>
+          <section class="panel"><header><h3>Write attempts</h3></header><div class="body flush">${r.primary.attempts.length ? html`${table({ key: `lineage-attempts:${r.id}`, items: newest(r.primary.attempts, (a) => a.at), cols: [['#', 60, 'num'], ['Time', 160], ['Result', ''], ['By', 140]],
+              row: (a) => html`<tr><td class="num">${a.n}</td><td class="small">${fmtTime(a.at)}</td><td class="small">${result(a.outcome)}</td><td class="small muted">${a.by === 'pipeline' ? 'Automatic' : a.by}</td></tr>` })}
+            <div class="body">${techDetails(table({ key: `lineage-attempts-tech:${r.id}`, items: newest(r.primary.attempts, (a) => a.at), cols: [['#', 60, 'num'], ['Outcome', 180], ['HTTP', 80], ['Note', ''], ['Idempotency key', 160]],
+              row: (a) => html`<tr><td class="num">${a.n}</td><td class="mono small">${a.outcome}</td><td class="small">${a.http || ''}</td><td class="small">${a.note}</td><td class="mono small">${a.idemKey.slice(0, 12)}…</td></tr>` }))}</div>` : empty('Not sent.')}</div></section>
           <section class="panel"><header><h3>Location</h3>${r.geo ? html`<span class="pill">${r.geo.locationType}</span>` : ''}</header><div class="body">${r.geo ? html`<dl class="kv small"><dt>Coordinates</dt><dd>${maskVal('latitude', r.geo.lat)}, ${maskVal('longitude', r.geo.lon)}</dd><dt>Accuracy</dt><dd>${r.geo.accuracyM ? r.geo.accuracyM + ' m' : '—'}</dd><dt>Admin areas</dt><dd>${r.geo.adminIds.join(' › ')}</dd><dt>Source</dt><dd>${r.geo.geoSource}</dd><dt>Method</dt><dd>${r.geo.collectionMethod}</dd><dt>Observed</dt><dd>${fmtTime(r.geo.observedAt)}</dd><dt>Validation</dt><dd>${r.geo.validation}</dd></dl>
             ${moreDetails('About this location', html`<p class="small muted" style="margin:0">Residential location as supplied by the source. Not a service point; never inferred. Precise values need payload permission.</p>`)}${techDetails(html`<dl class="kv small"><dt>CRS</dt><dd>${r.geo.crs}</dd></dl>`)}` : html`<div class="empty">No location supplied.</div>`}</div></section>
-          <section class="panel"><header><h3>Registry record (masked)</h3><span class="sub">${Object.keys(c).length}/${SCHEMA.fields.length} fields</span></header><div class="body"><dl class="kv small">${Object.entries(c).map(([k, v]) => html`<dt>${fieldLabel(k)}</dt><dd>${maskVal(k, typeof v === 'boolean' ? (v ? 'Yes' : 'No') : v)}</dd>`)}</dl></div></section>
+          <section class="panel"><header><h3>Registry record (masked)</h3><span class="sub">${Object.keys(c).length}/${SCHEMA.fields.length} fields</span></header><div class="body"><dl class="kv small">${Object.entries(c).map(([k, v]) => html`<dt>${fieldLabel(k)}</dt><dd>${T.brand(maskVal(k, typeof v === 'boolean' ? (v ? 'Yes' : 'No') : v))}</dd>`)}</dl></div></section>
         </div></div>`;
   }
 
   // ---------------------------------------------------------------------------
   // Audit, security, architecture
   // ---------------------------------------------------------------------------
-  function auditTable(list) {
-    if (!list.length) return html`<div class="empty">No audit events.</div>`;
+  function auditTable(list, key, sig) {
     const tech = techAllowed();
-    return html`<div class="tbl-wrap"><table class="t"><thead><tr><th>Time</th><th>User</th><th>Role</th><th>Action</th><th>Outcome</th><th>Detail</th>${tech ? html`<th>Reference</th>` : ''}</tr></thead><tbody>${list.slice().reverse().slice(0, 300).map((a) => { const [ol, ot] = T.OUTCOMES[a.outcome] || [label(a.outcome), 'serious']; return html`<tr><td class="small">${fmtTime(a.at)}</td><td class="small">${a.actor}</td><td class="small">${roleName(a.role)}</td><td>${T.auditAction(a.action)}</td><td><span class="pill ${ot}">${ol}</span></td><td class="small">${T.scrub(a.detail)}</td>${tech ? html`<td class="mono small muted tech-ref">${a.id} · ${a.action}<div>${a.target}</div></td>` : ''}</tr>`; })}</tbody></table></div>`;
+    return table({ key, sig, items: newest(list, (a) => a.at), empty: 'No audit events.', cols: [['Time', 160], ['User', 210], ['Role', 140], ['Action', 190], ['Outcome', 110], ['Detail', '']].concat(tech ? [['Reference', 300]] : []),
+      row: (a) => { const [ol, ot] = T.OUTCOMES[a.outcome] || [label(a.outcome), 'serious']; return html`<tr><td class="small">${fmtTime(a.at)}</td><td class="small">${a.actor}</td><td class="small">${roleName(a.role)}</td><td>${T.auditAction(a.action)}</td><td><span class="pill ${ot}">${ol}</span></td><td class="small">${T.scrub(a.detail)}</td>${tech ? html`<td class="mono small muted tech-ref">${a.id} · ${a.action} · ${a.target}</td>` : ''}</tr>`; } });
   }
   function pageAudit() {
-    if (!E.can('audit.view')) return html`${head('Audit log')}<div class="panel"><div class="empty"><b>Access denied.</b>Auditor or platform admin only.</div></div>`;
+    if (!E.can('audit.view')) return html`${head('Audit log')}<div class="panel">${empty('Access denied. Platform Admin only.')}</div>`;
     const q = UI.auditQ.toLowerCase();
     const list = S.audit.filter((a) => !q || (a.action + ' ' + T.auditAction(a.action) + ' ' + a.target + ' ' + a.detail + ' ' + a.outcome + ' ' + (T.OUTCOMES[a.outcome] || [''])[0]).toLowerCase().includes(q));
     return html`${head('Audit log', 'Append-only. Contains no personal data.')}
       <div class="filters"><label class="field" style="flex:1">Search<input type="search" id="audit-q" data-bind="auditQ" data-live value="${UI.auditQ}" placeholder="Action, target or outcome"></label><span class="small muted">${list.length} of ${S.audit.length}</span></div>
-      <section class="panel">${auditTable(list)}</section>`;
+      <section class="panel">${auditTable(list, 'audit', q)}</section>`;
   }
   const OWASP = [
     ['A01', 'Broken Access Control', 'Operator triggers retries or reads payloads for another programme', 'Server-side RBAC per action; object-level checks on run/record IDs; purpose + justification for raw payload', 'Engine authz() on every mutating call; UI only hides', 'Role switch → actions refused; denial audited'],
@@ -1269,27 +1328,29 @@
     ['A10', 'Mishandling of Exceptional Conditions', 'Timeouts treated as success; partial batch hides failures', 'Typed error taxonomy, per-record states, no "completed" while outstanding', 'Orchestrator, run status', 'Run status derivation tests'],
   ];
   function pageSecurity() {
-    if (!E.can('security.view')) return html`${head('Access control')}<div class="panel"><div class="empty"><b>Access denied.</b>Auditor or platform admin only.</div></div>`;
+    if (!E.can('security.view')) return html`${head('Access control')}<div class="panel">${empty('Access denied. Platform Admin only.')}</div>`;
     const refs = S.sources.filter((s) => s.authRef && s.authRef !== '—').map((s) => [s.name, s.authRef]).concat(S.destinations.map((d) => [d.role === 'PRIMARY' ? 'Master Registry 1' : 'Master Registry 2', d.authRef]));
+    const roles = Object.entries(DB.ROLES);
     return html`${head('Access control', 'Simulated controls are demonstrated by the prototype, not production systems.')}
-      <section class="panel"><header><h3>Permissions</h3><span class="sub">Current role highlighted</span></header><div class="tbl-wrap"><table class="t"><thead><tr><th>Permission</th>${Object.keys(DB.ROLES).map((k) => html`<th style="${k === S.role ? 'color:var(--brand)' : ''}">${roleName(k)}</th>`)}</tr></thead><tbody>
-        ${DB.PERMISSIONS.map(([p]) => html`<tr><td>${label(T.PERM_LABELS[p] || p)}${techAllowed() ? html`<div class="small muted mono">${p}</div>` : ''}</td>${Object.entries(DB.ROLES).map(([k, r]) => html`<td class="${k === S.role ? 'sel' : ''}">${r.perms.includes(p) ? html`<span class="ok-i" aria-label="Yes">✓</span>` : html`<span class="muted" aria-label="No">—</span>`}</td>`)}</tr>`)}
-      </tbody></table></div><div class="body small muted">Enforced server-side. Platform admins cannot view payloads; analysts can, with an audited reason.</div></section>
+      <section class="panel"><header><h3>Permissions</h3><span class="sub">Current role highlighted</span></header>${table({ key: 'permissions', items: DB.PERMISSIONS, cols: [['Permission', '']].concat(roles.map(([k]) => [roleName(k), 150, k === S.role ? 'sel' : ''])),
+        row: ([p]) => html`<tr><td>${label(T.PERM_LABELS[p] || p)}${techAllowed() ? html` <span class="small muted mono">· ${p}</span>` : ''}</td>${roles.map(([k, r]) => html`<td class="${k === S.role ? 'sel' : ''}">${r.perms.includes(p) ? html`<span class="ok-i" aria-label="Yes">✓</span>` : html`<span class="muted" aria-label="No">—</span>`}</td>`)}</tr>` })}
+      <div class="body small muted">Enforced server-side. Only Platform Admins can view payloads, and each view needs an audited reason.</div></section>
       <div class="grid">
-        <section class="panel c6"><header><h3>Secrets</h3><span class="mock-tag">simulated vault</span></header><div class="body stack"><p class="small muted" style="margin:0">Vault references only; values never shown.</p><table class="t"><tbody>${refs.map(([n, r]) => html`<tr><td>${n}</td><td class="mono small">${r}</td><td class="small muted">Hidden</td></tr>`)}</tbody></table>
+        <section class="panel c6"><header><h3>Secrets</h3><span class="mock-tag">simulated vault</span></header><div class="body stack"><p class="small muted" style="margin:0">Vault references only; values never shown.</p>${table({ key: 'secrets', items: refs, cols: [['Name', ''], ['Reference', 280], ['Value', 90]], row: ([n, r]) => html`<tr><td>${n}</td><td class="mono small">${r}</td><td class="small muted">Hidden</td></tr>` })}
           ${techDetails(html`<p class="note" style="margin:0">Production: HashiCorp Vault (or cloud secrets manager) issuing short-lived credentials; KMS/HSM-held keys, rotation every 90 days; AES-256 at rest for database, object store zones (raw, staging, canonical, reject) and backups; TLS 1.3 at the edge and mTLS inside the cluster. The prototype does not encrypt anything and does not claim to.</p>`)}</div></section>
         <section class="panel c6"><header><h3>Data protection</h3></header><div class="body"><ul class="checks small">
           ${['Synthetic records only (NIN prefix 99)', 'Sensitive fields masked by build-sheet sensitivity', 'Health and religion hidden in lists', 'Coordinates coarsened without payload permission', 'Messages name fields, not values; reports redacted', 'Payload view needs permission and an audited reason', 'Uploads stay in the browser; previews masked', 'Exports neutralise = + - @ (formula injection)'].map((x) => html`<li><span class="ok-i">✓</span><span>${x}</span></li>`)}</ul></div></section>
       </div>
-      ${moreDetails('OWASP controls', html`<section class="panel"><header><h3>OWASP Top 10:2025</h3><span class="sub">Full matrix with remaining risk: docs/security/owasp-controls.md</span></header><div class="tbl-wrap"><table class="t"><thead><tr><th>ID</th><th>Category</th><th>Middleware threat</th><th>Mitigation</th><th>Enforcement point</th><th>Verification</th></tr></thead><tbody>${OWASP.map((o) => html`<tr><td class="mono">${o[0]}</td><td><b>${o[1]}</b></td><td class="small">${o[2]}</td><td class="small">${o[3]}</td><td class="small">${o[4]}</td><td class="small">${o[5]}</td></tr>`)}</tbody></table></div></section>
-      <section class="panel"><header><h3>OWASP API risks</h3></header><div class="tbl-wrap"><table class="t"><tbody>${[
+      ${moreDetails('OWASP controls', html`<section class="panel"><header><h3>OWASP Top 10:2025</h3><span class="sub">Full matrix with remaining risk: docs/security/owasp-controls.md</span></header>${table({ key: 'owasp', items: OWASP, cols: [['ID', 70], ['Category', 250], ['Middleware threat', 300], ['Mitigation', 340], ['Enforcement point', 220], ['Verification', 260]],
+        row: (o) => html`<tr><td class="mono">${o[0]}</td><td><b>${o[1]}</b></td><td class="small">${o[2]}</td><td class="small">${o[3]}</td><td class="small">${o[4]}</td><td class="small">${o[5]}</td></tr>` })}</section>
+      <section class="panel"><header><h3>OWASP API risks</h3></header>${table({ key: 'owasp-api', cols: [['Risk', 320], ['Control', '']], row: ([a, b]) => html`<tr><td><b>${a}</b></td><td class="small">${b}</td></tr>`, items: [
         ['API1 Broken Object Level Authorization', 'Run and record IDs are checked against the caller’s programme scope, not only the role.'],
         ['API2 Broken Authentication', 'Per-source OAuth client credentials from vault; console tokens 5 min; no API keys in URLs.'],
         ['API4 Unrestricted Resource Consumption', 'Upload 5 MB cap (prototype), page-size limits, per-source rate budget, chunked processing.'],
         ['API7 Server Side Request Forgery', 'Configurable base URLs pass an https-only, allow-listed, no-IP-literal, no-internal-host check (try it in Add source).'],
         ['API9 Improper Inventory Management', 'Every source and destination is registered with environment, owner and version; removed sources stay in inventory.'],
         ['API10 Unsafe Consumption of APIs', 'Upstream responses are schema-checked (fingerprint), size-bounded and never trusted for redirects.'],
-      ].map(([a, b]) => html`<tr><td style="width:300px"><b>${a}</b></td><td class="small">${b}</td></tr>`)}</tbody></table></div></section>`)}`;
+      ] })}</section>`)}`;
   }
   function pageArchitecture() {
     return html`${head('Architecture', html`Eight diagrams from editable Mermaid source in <span class="mono">docs/architecture/</span>. Proposed components only.`)}
@@ -1443,10 +1504,12 @@
   const ACTIONS = {
     nav: (p) => { if (p === 'ingest' && UI.page !== 'ingest') UI.wiz = UI.wiz.step > 1 && !UI.wiz.runId ? UI.wiz : newWizard(); go(p, p === 'lineage' ? { recordId: null } : null); },
     tview: (v) => { UI.tview = v; UI.errOpen = null; },
+    page: (arg) => { const i = arg.lastIndexOf('|'); const k = arg.slice(0, i); if (UI.pages[k]) UI.pages[k].page = Number(arg.slice(i + 1)); },
+    'cell-toggle': (id) => { if (UI.expanded.has(id)) UI.expanded.delete(id); else UI.expanded.add(id); },
     'nsr-connect': () => nsrRun(nsrLoad),
     'nsr-history-csv': () => {
       const rows = (UI.nsr.deliveries || []).flatMap((d) => d.households.flatMap((h) => (h.record_ids || []).map((id) => [d.created_at, d.first_attempt_at || '', d.last_attempt_at || '', h.household_serial, id, d.origin, d.source || '', d.created_by, d.status, d.correlation_id || '', d.attempt_count, d.message_id])));
-      offerFile('nsr_send_history.csv', DB.toCsv([['queued_at', 'first_sent_at', 'last_try_at', 'household_serial', 'record_id', 'how', 'source', 'by', 'status', 'nsr_reference', 'tries', 'message_id']].concat(rows)), `${rows.length} records`);
+      offerFile('nsipa_registry_send_history.csv', DB.toCsv([['queued_at', 'first_sent_at', 'last_try_at', 'household_serial', 'record_id', 'how', 'source', 'by', 'status', 'nsipa_registry_reference', 'tries', 'message_id']].concat(rows)), `${rows.length} records`);
     },
     'nsr-toggle': (serial) => { const s = UI.nsr.selected; UI.nsr.selected = s.includes(serial) ? s.filter((x) => x !== serial) : s.concat(serial); UI.nsr.preview = null; UI.nsr.confirm = false; },
     'nsr-preview': () => nsrRun(async () => { UI.nsr.result = null; UI.nsr.confirm = false; UI.nsr.preview = await nsrApi('POST', '/preview', { household_serials: UI.nsr.selected }); }),
@@ -1537,12 +1600,13 @@
     'dest-toggle': () => { E.updateDestination('MASTER_SR1', { enabled: !S.destinations[0].enabled }); toast(S.destinations[0].enabled ? 'Master Registry 1 enabled.' : 'Master Registry 1 disabled. New transfers will fail pre-flight.', !S.destinations[0].enabled); },
     'map-open': (id) => go('mapping', { mapSource: id, mapDraft: null, mapTest: null, mapTab: 'mapping' }),
     maptab: (t) => { UI.mapTab = t; },
-    'map-add': () => { UI.mapDraft.rows.push({ sources: [], op: 'trim', arg: null, target: '' }); },
+    // A new row is added at the end, so the list moves to its last page to show it.
+    'map-add': () => { UI.mapDraft.rows.push({ sources: [], op: 'trim', arg: null, target: '' }); const k = `map-rows:${UI.mapSource}`; if (UI.pages[k]) UI.pages[k].page = Infinity; },
     'map-del': (i) => { UI.mapDraft.rows.splice(Number(i), 1); },
     'map-revert': () => { UI.mapDraft = null; UI.mapTest = null; },
     'map-test': () => { UI.mapTest = E.testMapping(UI.mapSource, UI.mapDraft.rows, Math.floor(Math.random() * 3)); },
     'map-publish': () => { const mp = E.publishMapping(UI.mapSource, UI.mapDraft.rows, UI.mapNote.trim()); UI.mapNote = ''; UI.mapDraft = null; toast(`Mapping v${mp.version} published.`); },
-    template: () => offerFile('nsr_import_template.csv', templateCsv(), `CCT template v1: ${SCHEMA.fields.filter((f) => f.fill === 'source').length} columns, 2 synthetic rows.`),
+    template: () => offerFile('nsr_import_template.csv', templateCsv(), `Template v1: ${SCHEMA.fields.filter((f) => f.fill === 'source').length} columns, 2 synthetic rows.`),
     'wiz-source': (id) => pickSource(id),
     'wiz-mode': (m) => { UI.wiz.mode = m; UI.wiz.file = null; UI.wiz.upload = null; UI.wiz.dry = null; UI.wiz.headerCheck = null; },
     'wiz-step': (n) => { const w = UI.wiz; w.step = Math.max(1, Math.min(3, Number(n))); w.dry = null; w.ack = false; w.showIssues = false; if (w.step <= 2) { w.file = null; w.upload = null; w.headerCheck = null; } if (w.step === 1) w.mode = ''; },
@@ -1651,6 +1715,17 @@
     UI.page = allowedPage(UI.page);
     try { content = PAGE_FN[UI.page](); } catch (err) { console.error(err); content = html`<div class="callout crit"><b>This view failed to render.</b> ${err.message}</div>`; }
     document.getElementById('app').innerHTML = shell(content).s;
+    // Source names and descriptions come from configuration; on screen the product is just "DataBridge".
+    const ORG = /NigeriaG2P|(?<![\w-])CCT(?![\w-])/;
+    const walker = document.createTreeWalker(document.getElementById('app'), NodeFilter.SHOW_TEXT, { acceptNode: (n) => (ORG.test(n.nodeValue) && !n.parentElement.closest('pre, textarea, code') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) n.nodeValue = T.orgName(n.nodeValue);
+    document.querySelectorAll('#app [title]').forEach((el) => { if (ORG.test(el.title)) el.title = T.orgName(el.title); });
+    // Cells are cut to one line; hovering shows the full value.
+    document.querySelectorAll('#app table.t td:not([title]), #app table.t th:not([title])').forEach((c) => {
+      if (c.querySelector('button, input, select, table')) return;
+      const t = c.textContent.replace(/\s+/g, ' ').trim();
+      if (t) c.title = t;
+    });
     const arch = document.getElementById('arch-static');
     if (arch) { const on = UI.page === 'architecture'; arch.classList.toggle('offstage', !on); arch.setAttribute('aria-hidden', String(!on)); }
     if (focusId) {

@@ -86,14 +86,15 @@
     ['Reconcile', ['RECONCILE']],
   ];
 
-  const ROLE_LABELS = { PLATFORM_ADMIN: 'Platform admin', SOURCE_CONFIG_ADMIN: 'Source admin', INGESTION_OPERATOR: 'Transfer operator', DATA_QUALITY_ANALYST: 'Data quality analyst', AUDITOR: 'Auditor', READ_ONLY: 'Read-only' };
+  // Three roles. The keys stay as the engine defines them; only the labels are for people.
+  const ROLE_LABELS = { PLATFORM_ADMIN: 'Platform Admin', INGESTION_OPERATOR: 'Operator', READ_ONLY: 'Read-only' };
   // Verb phrases: used in "Your role cannot …" and the access-control matrix.
   const PERM_LABELS = {
     'source.edit': 'manage sources', 'source.toggle': 'enable or disable sources', 'source.test': 'check connections',
     'mapping.edit': 'edit field mappings', 'destination.edit': 'edit destinations', 'run.start': 'start transfers',
     'run.retry': 'retry records', 'run.reconcile': 'reconcile transfers', 'error.resolve': 'resolve exceptions',
     'payload.view': 'view source payloads', 'report.download': 'download reports', 'audit.view': 'view the audit log', 'security.view': 'view access control',
-    'nsr.preview': 'check households for NSR', 'nsr.submit': 'send households to NSR',
+    'nsr.preview': 'check households for the NSIPA Registry', 'nsr.submit': 'send households to the NSIPA Registry',
   };
   const AUDIT_ACTIONS = {
     AUTHZ_DENIED: 'Access denied', ERROR_ACKNOWLEDGED: 'Exception reviewed', ROLE_SWITCHED: 'Role changed', RUN_STARTED: 'Transfer started', RUN_START_BLOCKED: 'Transfer blocked',
@@ -113,8 +114,28 @@
   // Engine free text (stage notes, events, messages) may mention codes or destination IDs.
   // scrub() swaps them for operator labels before they reach ordinary UI text.
   const CODE_RE = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g;
-  function scrub(text) {
+  // Display wording for text the console does not write itself (schema labels, seed data, server
+  // messages). "NSR" on its own becomes "NSIPA Registry"; codes (NSR_...), source IDs (SRC-NSR-...)
+  // and household serials (NSR-HH-...) are left exactly as they are.
+  const BRAND_RE = /(?<![\w-])NSR(?![\w-])/g;
+  // The product is called "DataBridge" on screen: no "NigeriaG2P" and no "CCT" in displayed text.
+  // Code names (CCT_TEMPLATE_V1, CCT_DATABRIDGE) are left as they are.
+  function orgName(text) {
     return String(text === null || text === undefined ? '' : text)
+      .replace(/\bNigeriaG2P\s*·\s*/g, '')
+      .replace(/\s*·\s*NigeriaG2P\b/g, '')
+      .replace(/\bNigeriaG2P\s*/g, '')
+      .replace(/(?<![\w-])CCT\s+template/g, (m, i, s) => (i === 0 || /[.:(]\s*$/.test(s.slice(0, i)) ? 'Template' : 'template'))
+      .replace(/(?<![\w-])CCT\s+(?=\S)/g, '');
+  }
+  function brand(text) {
+    return orgName(text)
+      .replace(/\bthe NSR Household Register\b/g, 'the NSIPA Registry')
+      .replace(BRAND_RE, 'NSIPA Registry')
+      .replace(/\bby hand\b/g, 'manually');
+  }
+  function scrub(text) {
+    return brand(text)
       .replace(/\bMASTER_SR([12])\b/g, 'Master Registry $1')
       .replace(/\bSR([12])\b/g, 'Master Registry $1')
       .replace(/\(ERR-\d+\)/g, '')
@@ -189,7 +210,7 @@
   // ---- Simplified operator UI ------------------------------------------------
   // Four sections. Settings is shown only to SETTINGS_ROLES; regular operators never see it.
   const NAV = [['home', 'Home'], ['ingest', 'Add Records'], ['runs', 'Transfers'], ['settings', 'Settings']];
-  const SETTINGS_ROLES = ['PLATFORM_ADMIN', 'SOURCE_CONFIG_ADMIN', 'DATA_QUALITY_ANALYST', 'AUDITOR'];
+  const SETTINGS_ROLES = ['PLATFORM_ADMIN'];
   const SETTINGS_GROUPS = [
     ['Configuration', [['sources', 'Sources'], ['mapping', 'Field Mapping'], ['destinations', 'Destinations']]],
     ['Governance', [['audit', 'Audit Log'], ['security', 'Access Control']]],
@@ -206,5 +227,36 @@
   const SIMPLE_STATUSES = ['Completed', 'Processing', 'Needs Attention', 'Failed'];
   const simpleStatus = (s) => { const [label, tone] = SIMPLE_STATUS[s] || ['Needs Attention', 'warn']; return { label, tone }; };
 
-  return { NAV, SETTINGS_ROLES, SETTINGS_GROUPS, SETTINGS_PAGES, SIMPLE_STATUS, SIMPLE_STATUSES, simpleStatus, SCENARIO_TEXT, ERROR_MESSAGES, FALLBACK, friendlyError, RUN_STATUS, RUN_STATUS_FILTER, runStatus, RECORD_STATUS, recordStatus, STAGE_LABELS, JOURNEY, ROLE_LABELS, PERM_LABELS, AUDIT_ACTIONS, auditAction, OUTCOMES, TERMS, modeLabel, scrub, plainMessage, hasRawCode, issueText, sentence };
+  // ---- Pagination: one rule for every list in the console --------------------
+  const PAGE_SIZE = 8;
+  // The page to show for `total` rows, clamped to the pages that exist.
+  function paginate(total, page, size) {
+    const n = size || PAGE_SIZE;
+    const pages = Math.max(1, Math.ceil(Math.max(0, total) / n));
+    const p = Math.min(Math.max(1, Math.floor(Number(page)) || 1), pages);
+    const from = (p - 1) * n;
+    return { page: p, pages, total, from, to: Math.min(total, from + n), size: n };
+  }
+  // Each list keeps its page in `store[key]`. A different filter signature starts it again at page 1.
+  function pageState(store, key, total, sig) {
+    const s = store[key] || (store[key] = { page: 1, sig });
+    if (s.sig !== sig) { s.page = 1; s.sig = sig; }
+    const pg = paginate(total, s.page);
+    s.page = pg.page;
+    return pg;
+  }
+  // Page buttons: all of them up to 7 pages, otherwise first, last, the neighbours of the current one and '...'.
+  function pageItems(page, pages) {
+    if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1);
+    const out = [1];
+    const lo = Math.max(2, Math.min(page - 1, pages - 4)), hi = Math.min(pages - 1, Math.max(page + 1, 5));
+    if (lo > 2) out.push('...');
+    for (let i = lo; i <= hi; i++) out.push(i);
+    if (hi < pages - 1) out.push('...');
+    out.push(pages);
+    return out;
+  }
+  const pageLabel = (pg) => `Showing ${pg.total ? pg.from + 1 : 0}-${pg.to} of ${pg.total}`;
+
+  return { PAGE_SIZE, paginate, pageState, pageItems, pageLabel, brand, orgName, NAV, SETTINGS_ROLES, SETTINGS_GROUPS, SETTINGS_PAGES, SIMPLE_STATUS, SIMPLE_STATUSES, simpleStatus, SCENARIO_TEXT, ERROR_MESSAGES, FALLBACK, friendlyError, RUN_STATUS, RUN_STATUS_FILTER, runStatus, RECORD_STATUS, recordStatus, STAGE_LABELS, JOURNEY, ROLE_LABELS, PERM_LABELS, AUDIT_ACTIONS, auditAction, OUTCOMES, TERMS, modeLabel, scrub, plainMessage, hasRawCode, issueText, sentence };
 });

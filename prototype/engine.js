@@ -136,7 +136,7 @@
     FIELD_MAPPING_FAILED: { stage: 'PREFLIGHT', retryable: false, severity: 'critical', desc: 'Mapping configuration is invalid or leaves required fields unmapped', action: 'Fix the mapping in Field Mapping and publish a new version.' },
     TRANSFORMATION_FAILED: { stage: 'MAP_TRANSFORM', retryable: false, severity: 'serious', desc: 'A transformation rule could not convert the source value', action: 'Correct the source value or adjust the transformation rule.' },
     DUPLICATE_RECORD: { stage: 'DEDUPLICATE', retryable: false, severity: 'warning', desc: 'Record duplicates another record in the same batch', action: 'No action needed unless the duplicate is legitimate; fix at source.' },
-    MATCH_REQUIRES_REVIEW: { stage: 'DEDUPLICATE', retryable: false, severity: 'warning', desc: 'Possible match with a master record from another source', action: 'Data Quality Analyst reviews: approve as new person or reject.' },
+    MATCH_REQUIRES_REVIEW: { stage: 'DEDUPLICATE', retryable: false, severity: 'warning', desc: 'Possible match with a master record from another source', action: 'An Operator or Platform Admin reviews: approve as new person or reject.' },
     MASTER_WRITE_FAILED: { stage: 'DELIVER_PRIMARY', retryable: false, severity: 'critical', desc: 'MASTER_SR1 rejected or exhausted retries for the write', action: 'Inspect the destination response; fix data and re-send, or retry if transient.' },
     MASTER_WRITE_OUTCOME_UNKNOWN: { stage: 'DELIVER_PRIMARY', retryable: true, severity: 'critical', desc: 'Write timed out; MASTER_SR1 may or may not have committed it', action: 'Reconcile first (query by idempotency key). Re-sending is safe because the key is stable.' },
     REPLICA_SYNC_PENDING: { stage: 'REPLICA_SYNC', retryable: true, severity: 'warning', desc: 'Record written to MASTER_SR1 but not yet visible in MASTER_SR2', action: 'Wait for replication; investigate if lag exceeds the threshold.' },
@@ -158,18 +158,21 @@
     ['report.download', 'Download reports'],
     ['audit.view', 'View audit log'],
     ['security.view', 'View security configuration'],
-    ['nsr.preview', 'Check households and view NSR deliveries'],
-    ['nsr.submit', 'Send households to the NSR Household Register'],
+    ['nsr.preview', 'Check households and view NSIPA Registry deliveries'],
+    ['nsr.submit', 'Send households to the NSIPA Registry'],
   ];
 
+  // Three roles. Platform Admin holds every permission; Operator adds records and sends them to the
+  // NSIPA Registry but has no Settings; Read-only changes nothing.
   const ROLES = {
-    PLATFORM_ADMIN: { label: 'Platform Administrator', perms: ['source.edit', 'source.toggle', 'source.test', 'mapping.edit', 'destination.edit', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download', 'audit.view', 'security.view', 'nsr.preview', 'nsr.submit'] },
-    SOURCE_CONFIG_ADMIN: { label: 'Source Configuration Administrator', perms: ['source.edit', 'source.toggle', 'source.test', 'mapping.edit', 'run.start'] },
-    INGESTION_OPERATOR: { label: 'Ingestion Operator', perms: ['source.test', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download', 'nsr.preview', 'nsr.submit'] },
-    DATA_QUALITY_ANALYST: { label: 'Data Quality Analyst', perms: ['error.resolve', 'payload.view', 'report.download', 'nsr.preview'] },
-    AUDITOR: { label: 'Auditor', perms: ['audit.view', 'security.view', 'report.download', 'nsr.preview'] },
-    READ_ONLY: { label: 'Read-Only Viewer', perms: [] },
+    PLATFORM_ADMIN: { label: 'Platform Admin', perms: PERMISSIONS.map(([p]) => p) },
+    INGESTION_OPERATOR: { label: 'Operator', perms: ['source.test', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download', 'nsr.preview', 'nsr.submit'] },
+    READ_ONLY: { label: 'Read-only', perms: [] },
   };
+  // Roles that no longer exist. State saved under one of them continues as Operator.
+  const RETIRED_ROLES = ['SOURCE_CONFIG_ADMIN', 'DATA_QUALITY_ANALYST', 'AUDITOR'];
+  const normalizeRole = (role) => (ROLES[role] ? role : RETIRED_ROLES.includes(role) ? 'INGESTION_OPERATOR' : null);
+  const roleOf = (role) => ROLES[normalizeRole(role) || 'READ_ONLY'];
 
   const SCENARIOS = [
     { id: 'S01', title: 'Successful API ingestion', source: 'SRC-NSR-NASSCO', mode: 'API', sim: { pages: 3, pageSize: 10 }, expect: 'All records written to SR1 and confirmed in SR2.' },
@@ -509,7 +512,7 @@
     }
 
     // ---- RBAC + audit --------------------------------------------------------
-    const can = (perm) => ROLES[state.role].perms.includes(perm);
+    const can = (perm) => roleOf(state.role).perms.includes(perm);
     function audit(action, target, outcome, detail) {
       const id = `AUD-${pad(++state.seq.aud, 6)}`;
       state.audit.push({ id, at: state.now, actor: state.user, role: state.role, action, target, outcome: outcome || 'SUCCESS', detail: detail || '', traceId: 'tr-' + sha256(id + state.now).slice(0, 12) });
@@ -518,7 +521,7 @@
     function authz(perm, target) {
       if (!can(perm)) {
         audit('AUTHZ_DENIED', target || '-', 'DENIED', `Missing permission ${perm}`);
-        throw new AuthzError(`Your role (${ROLES[state.role].label}) does not have permission: ${perm}`);
+        throw new AuthzError(`Your role (${roleOf(state.role).label}) does not have permission: ${perm}`);
       }
     }
 
@@ -815,7 +818,7 @@
       const s = getSource(sourceId);
       if (!s || s.removed) throw new Error('Unknown source');
       if (!s.enabled) {
-        const e = raise('SOURCE_DISABLED', { sourceId, detail: `Start requested by ${state.user} (${ROLES[state.role].label}); refused before any data was read.` });
+        const e = raise('SOURCE_DISABLED', { sourceId, detail: `Start requested by ${state.user} (${roleOf(state.role).label}); refused before any data was read.` });
         const a = audit('RUN_START_BLOCKED', sourceId, 'DENIED', 'Source is disabled');
         state.blockedAttempts.push({ at: state.now, sourceId, errorId: e.id, auditId: a });
         return { blocked: true, reason: 'Source is disabled. Enable it before starting ingestion.', errorId: e.id };
@@ -829,7 +832,7 @@
       let rows = clone(mp.rows);
       if (sim.mappingBreak) rows = rows.filter((r) => r.target !== sim.mappingBreak);
       const run = {
-        id, sourceId, sourceName: s.name, mode, scenarioId: o.scenarioId || null, triggeredBy: `${state.user} (${ROLES[state.role].label})`,
+        id, sourceId, sourceName: s.name, mode, scenarioId: o.scenarioId || null, triggeredBy: `${state.user} (${roleOf(state.role).label})`,
         createdAt: state.now, startedAt: null, endedAt: null, traceId: 'tr-' + sha256(id).slice(0, 16), sim,
         mappingVersion: sim.mappingBreak ? `${mp.version}-draft` : mp.version, mappingRows: rows, transformVersion: mp.transformVersion,
         stages: (mode === 'API' ? API_STAGES : FILE_STAGES).map((k) => ({ key: k, label: STAGE_LABELS[k], status: 'PENDING', startedAt: null, endedAt: null, inCount: null, outCount: null, failCount: null, note: '' })),
@@ -1621,9 +1624,10 @@
       return d;
     }
 
-    function setRole(role) {
-      if (!ROLES[role]) throw new Error('Unknown role');
-      audit('ROLE_SWITCHED', role, 'SUCCESS', `Demo role switch ${ROLES[state.role].label} → ${ROLES[role].label}`);
+    function setRole(requested) {
+      const role = normalizeRole(requested);
+      if (!role) throw new Error('Unknown role');
+      audit('ROLE_SWITCHED', role, 'SUCCESS', `Demo role switch ${roleOf(state.role).label} → ${ROLES[role].label}`);
       state.role = role;
     }
 
@@ -1700,5 +1704,5 @@
     return out;
   }
 
-  return { createEngine, seedDemo, backendRecord, SCENARIOS, ERROR_TAXONOMY, ROLES, PERMISSIONS, TRANSFORMS, sha256, parseCsv, csvCell, toCsv, mulberry32 };
+  return { createEngine, seedDemo, backendRecord, SCENARIOS, ERROR_TAXONOMY, ROLES, RETIRED_ROLES, normalizeRole, PERMISSIONS, TRANSFORMS, sha256, parseCsv, csvCell, toCsv, mulberry32 };
 });

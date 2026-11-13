@@ -179,7 +179,7 @@ Startup refuses: an enabled webhook without signature or submit key, a non-https
 
 ## 7. Security
 
-- **Who can send**: only holders of the NSR submit key, with an operator name, after a preview, with `"confirm": true`. The console adds a role check (`nsr.submit`: Transfer operator and Platform admin; `nsr.preview`: also Data quality analyst and Auditor), but the server key is the real control.
+- **Who can send**: only holders of the NSR submit key, with an operator name, after a preview, with `"confirm": true`. The console adds a role check (`nsr.submit` and `nsr.preview`: Operator and Platform Admin; Read-only has neither), but the server key is the real control.
 - **Secrets**: `NSR_WEBHOOK_SIGNATURE` and `DATABRIDGE_NSR_SUBMIT_KEY` come only from the environment (Kubernetes Secret `databridge-nsr-secrets`). They are never logged, never returned by the API, never in Postman files or Git.
 - **Logs** (`nsr delivery <id> attempt <n> <outcome> -> <status> http=<code> ms=<n> correlation=<id>`) and the audit trail hold IDs, statuses and household serials only, never field values. Tests check this.
 - **Consent** is never assumed. Health, disability, religion, assets and crops are never answered "NO" on the household's behalf.
