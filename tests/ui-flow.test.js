@@ -467,6 +467,18 @@ test('wording: NSIPA Registry, Sample Files, NASSCO National Social Registry fir
     }
   }
   assert.ok(u.$('[data-act="tview"][data-arg="nsr"]').textContent.includes('Send to NSIPA Registry'));
+  // Branding: "DataBridge" only; the clock shows the time without demo controls.
+  for (const page of ['home', 'ingest', 'runs', 'settings', 'sources']) {
+    if (page === 'sources') { u.click('main [data-act="nav"][data-arg="sources"]'); u.click('main [data-act="source"][data-arg="SRC-LEGACY-PILOT"]'); } else u.click(`[data-act="nav"][data-arg="${page}"]`);
+    const shown = u.$('#app').textContent + u.$$('#app [title]').map((e) => e.title).join(' ');
+    assert.doesNotMatch(shown, /NigeriaG2P|(?<![\w-])CCT(?![\w-])|Staff services|Demo clock/, page);
+  }
+  assert.match(u.text(), /Legacy Pilot List/, 'configured names are shown without CCT');
+  assert.equal(u.$('.brand').textContent.trim(), 'DataBridge');
+  assert.equal(u.$('.module-name').textContent, 'DataBridge');
+  assert.match(u.$('.clock').textContent.trim(), /^\d{1,2} [A-Z][a-z]{2} \d\d:\d\d$/);
+  assert.ok(!u.$('[data-act="clock"]') && !u.$('[data-act="auto"]'), 'no +30 s, +3 min or Play');
+  assert.equal(u.d.title || 'DataBridge', 'DataBridge');
   u.click('[data-act="nav"][data-arg="ingest"]');
   const picks = u.$$('[data-act="wiz-source"]');
   assert.equal(picks[0].dataset.arg, 'SRC-LGA-UPLOAD');

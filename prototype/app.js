@@ -307,10 +307,10 @@
   function shell(content) {
     const nc = navCounts();
     const nav = T.NAV.filter(([k]) => k !== 'settings' || techAllowed());
-    return html`<div class="strip"><span>NigeriaG2P · CCT DataBridge</span></div>
+    return html`<div class="strip"><span>DataBridge</span></div>
       <div class="shell">
       <nav class="rail" aria-label="Main">
-        <div class="brand"><span class="brand-word">NigeriaG2P</span><span class="brand-sub">Staff services</span><span class="brand-app">CCT DataBridge</span></div>
+        <div class="brand"><span class="brand-word">DataBridge</span></div>
         <div class="nav-wrap"><div class="nav-group">${nav.map(([k, l]) => html`
           <button class="nav-btn" data-act="nav" data-arg="${k}" ${raw(section(UI.page) === k ? 'aria-current="page"' : '')}>${l}
           ${k === 'runs' && nc.attention ? html`<span class="nav-count" title="Needs Attention">${nc.attention}</span>` : ''}</button>`)}</div></div>
@@ -318,11 +318,8 @@
       </nav>
       <div class="main">
         <header class="topbar">
-          <div class="env"><span class="module-name">CCT DataBridge</span></div>
-          <div class="clock" title="Demo clock: runs retries and replication checks"><span>Demo clock</span><time>${fmtTime(S.now, false)}</time>
-            <button class="btn sm" data-act="clock" data-arg="30000">+30 s</button>
-            <button class="btn sm" data-act="clock" data-arg="180000">+3 min</button>
-            <button class="btn sm" data-act="auto" aria-pressed="${UI.auto}">${UI.auto ? 'Pause' : 'Play'}</button></div>
+          <div class="env"><span class="module-name">DataBridge</span></div>
+          <div class="clock"><time>${fmtTime(S.now, false)}</time></div>
           <div class="who"><label for="role">Acting as</label>
             <select id="role" data-change="role">${Object.keys(DB.ROLES).map((k) => html`<option value="${k}" ${raw(S.role === k ? 'selected' : '')}>${roleName(k)}</option>`)}</select></div>
         </header>
@@ -897,7 +894,7 @@
   // ---------------------------------------------------------------------------
   // Sources
   // ---------------------------------------------------------------------------
-  const LAYOUTS = { NASSCO_FORM_45: 'NASSCO NSIPA Registry form 4.5', JOSH_V2: 'State registry v2 (assumed)', CCT_TEMPLATE_V1: 'CCT template v1' };
+  const LAYOUTS = { NASSCO_FORM_45: 'NASSCO NSIPA Registry form 4.5', JOSH_V2: 'State registry v2 (assumed)', CCT_TEMPLATE_V1: 'Template v1' };
   // Engine connection-check step names, shortened.
   const CHECK_STEPS = { 'Source enabled': 'Source enabled', 'Template registered': 'Template registered', 'Quarantine bucket writable (simulated)': 'Quarantine ready', 'Egress / SSRF policy': 'Address allowed', 'DNS + TLS 1.3 handshake (simulated)': 'Secure connection (TLS)', 'Fetch credential from vault (simulated)': 'Credentials (vault)', 'Authenticate with source': 'Authentication', 'Probe schema (1 record)': 'Schema check' };
   const checkList = (steps) => html`<ul class="checks">${steps.map(([n, ok, d]) => html`<li><span class="${ok ? 'ok-i' : 'no-i'}">${ok ? '✓' : '✕'}</span><span><b>${CHECK_STEPS[n] || n}</b>${ok ? '' : html` <span class="muted">${T.scrub(d)}</span>`}</span></li>`)}</ul>`;
@@ -948,7 +945,7 @@
       <details class="wide more" ${raw(f._new ? 'open' : '')}><summary>Advanced</summary><div class="form more-body">
         ${inp('id', 'Source ID', 'SRC-STATE-EXAMPLE')}
         ${sel('layout', 'Source layout', Object.entries(LAYOUTS))}
-        ${f.connection === 'API' ? html`${inp('endpoint', 'Endpoint', '/v1/records')}${sel('method', 'HTTP method', [['GET', 'GET'], ['POST', 'POST']])}${inp('pagination', 'Pagination', 'cursor, page size 100')}${inp('incremental', 'Incremental fetch', 'updated_since watermark')}` : html`${inp('importFormat', 'Import format', 'CCT template v1 (.csv / .xlsx)')}`}
+        ${f.connection === 'API' ? html`${inp('endpoint', 'Endpoint', '/v1/records')}${sel('method', 'HTTP method', [['GET', 'GET'], ['POST', 'POST']])}${inp('pagination', 'Pagination', 'cursor, page size 100')}${inp('incremental', 'Incremental fetch', 'updated_since watermark')}` : html`${inp('importFormat', 'Import format', 'Template v1 (.csv / .xlsx)')}`}
         ${inp('schemaVersion', 'Schema version')}</div></details>
       <div class="wide small muted">https only; allow-listed hosts (.gov.ng, .mock.invalid). Credentials: vault references only.</div>
       ${f._error ? html`<div class="wide callout crit">${T.scrub(f._error)}</div>` : ''}</div>`;
@@ -1609,7 +1606,7 @@
     'map-revert': () => { UI.mapDraft = null; UI.mapTest = null; },
     'map-test': () => { UI.mapTest = E.testMapping(UI.mapSource, UI.mapDraft.rows, Math.floor(Math.random() * 3)); },
     'map-publish': () => { const mp = E.publishMapping(UI.mapSource, UI.mapDraft.rows, UI.mapNote.trim()); UI.mapNote = ''; UI.mapDraft = null; toast(`Mapping v${mp.version} published.`); },
-    template: () => offerFile('nsr_import_template.csv', templateCsv(), `CCT template v1: ${SCHEMA.fields.filter((f) => f.fill === 'source').length} columns, 2 synthetic rows.`),
+    template: () => offerFile('nsr_import_template.csv', templateCsv(), `Template v1: ${SCHEMA.fields.filter((f) => f.fill === 'source').length} columns, 2 synthetic rows.`),
     'wiz-source': (id) => pickSource(id),
     'wiz-mode': (m) => { UI.wiz.mode = m; UI.wiz.file = null; UI.wiz.upload = null; UI.wiz.dry = null; UI.wiz.headerCheck = null; },
     'wiz-step': (n) => { const w = UI.wiz; w.step = Math.max(1, Math.min(3, Number(n))); w.dry = null; w.ack = false; w.showIssues = false; if (w.step <= 2) { w.file = null; w.upload = null; w.headerCheck = null; } if (w.step === 1) w.mode = ''; },
@@ -1718,6 +1715,11 @@
     UI.page = allowedPage(UI.page);
     try { content = PAGE_FN[UI.page](); } catch (err) { console.error(err); content = html`<div class="callout crit"><b>This view failed to render.</b> ${err.message}</div>`; }
     document.getElementById('app').innerHTML = shell(content).s;
+    // Source names and descriptions come from configuration; on screen the product is just "DataBridge".
+    const ORG = /NigeriaG2P|(?<![\w-])CCT(?![\w-])/;
+    const walker = document.createTreeWalker(document.getElementById('app'), NodeFilter.SHOW_TEXT, { acceptNode: (n) => (ORG.test(n.nodeValue) && !n.parentElement.closest('pre, textarea, code') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) n.nodeValue = T.orgName(n.nodeValue);
+    document.querySelectorAll('#app [title]').forEach((el) => { if (ORG.test(el.title)) el.title = T.orgName(el.title); });
     // Cells are cut to one line; hovering shows the full value.
     document.querySelectorAll('#app table.t td:not([title]), #app table.t th:not([title])').forEach((c) => {
       if (c.querySelector('button, input, select, table')) return;

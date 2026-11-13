@@ -220,3 +220,13 @@ test('roles: three labels, and only Platform Admin sees Settings', () => {
   assert.equal(T.ROLE_LABELS.READ_ONLY, 'Read-only');
   assert.deepEqual(T.SETTINGS_ROLES, ['PLATFORM_ADMIN']);
 });
+
+test('wording: the product reads DataBridge, without NigeriaG2P or CCT; code names unchanged', () => {
+  assert.equal(T.orgName('NigeriaG2P · CCT DataBridge'), 'DataBridge');
+  assert.equal(T.orgName('CCT DataBridge'), 'DataBridge');
+  assert.equal(T.orgName('Legacy CCT Pilot List'), 'Legacy Pilot List');
+  assert.equal(T.orgName('CCT template v1 (.csv)'), 'Template v1 (.csv)');
+  assert.equal(T.orgName('Lists using the published CCT template.'), 'Lists using the published template.');
+  for (const keep of ['CCT_TEMPLATE_V1', 'CCT_DATABRIDGE']) assert.equal(T.orgName(keep), keep);
+  assert.equal(T.brand('CCT DataBridge sends to NSR'), 'DataBridge sends to NSIPA Registry');
+});

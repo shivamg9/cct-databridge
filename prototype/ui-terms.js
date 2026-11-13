@@ -118,8 +118,18 @@
   // messages). "NSR" on its own becomes "NSIPA Registry"; codes (NSR_...), source IDs (SRC-NSR-...)
   // and household serials (NSR-HH-...) are left exactly as they are.
   const BRAND_RE = /(?<![\w-])NSR(?![\w-])/g;
-  function brand(text) {
+  // The product is called "DataBridge" on screen: no "NigeriaG2P" and no "CCT" in displayed text.
+  // Code names (CCT_TEMPLATE_V1, CCT_DATABRIDGE) are left as they are.
+  function orgName(text) {
     return String(text === null || text === undefined ? '' : text)
+      .replace(/\bNigeriaG2P\s*·\s*/g, '')
+      .replace(/\s*·\s*NigeriaG2P\b/g, '')
+      .replace(/\bNigeriaG2P\s*/g, '')
+      .replace(/(?<![\w-])CCT\s+template/g, (m, i, s) => (i === 0 || /[.:(]\s*$/.test(s.slice(0, i)) ? 'Template' : 'template'))
+      .replace(/(?<![\w-])CCT\s+(?=\S)/g, '');
+  }
+  function brand(text) {
+    return orgName(text)
       .replace(/\bthe NSR Household Register\b/g, 'the NSIPA Registry')
       .replace(BRAND_RE, 'NSIPA Registry')
       .replace(/\bby hand\b/g, 'manually');
@@ -248,5 +258,5 @@
   }
   const pageLabel = (pg) => `Showing ${pg.total ? pg.from + 1 : 0}-${pg.to} of ${pg.total}`;
 
-  return { PAGE_SIZE, paginate, pageState, pageItems, pageLabel, brand, NAV, SETTINGS_ROLES, SETTINGS_GROUPS, SETTINGS_PAGES, SIMPLE_STATUS, SIMPLE_STATUSES, simpleStatus, SCENARIO_TEXT, ERROR_MESSAGES, FALLBACK, friendlyError, RUN_STATUS, RUN_STATUS_FILTER, runStatus, RECORD_STATUS, recordStatus, STAGE_LABELS, JOURNEY, ROLE_LABELS, PERM_LABELS, AUDIT_ACTIONS, auditAction, OUTCOMES, TERMS, modeLabel, scrub, plainMessage, hasRawCode, issueText, sentence };
+  return { PAGE_SIZE, paginate, pageState, pageItems, pageLabel, brand, orgName, NAV, SETTINGS_ROLES, SETTINGS_GROUPS, SETTINGS_PAGES, SIMPLE_STATUS, SIMPLE_STATUSES, simpleStatus, SCENARIO_TEXT, ERROR_MESSAGES, FALLBACK, friendlyError, RUN_STATUS, RUN_STATUS_FILTER, runStatus, RECORD_STATUS, recordStatus, STAGE_LABELS, JOURNEY, ROLE_LABELS, PERM_LABELS, AUDIT_ACTIONS, auditAction, OUTCOMES, TERMS, modeLabel, scrub, plainMessage, hasRawCode, issueText, sentence };
 });
