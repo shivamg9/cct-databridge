@@ -108,7 +108,7 @@
     wiz: newWizard(), mapSource: 'SRC-NSR-NASSCO', mapDraft: null, mapTab: 'mapping', mapTest: null, mapVal: null, mapNote: '',
     schemaQ: { q: '', object: '', mandatory: '', sens: '', fill: '' },
     reconScope: '', reconOpen: null, lineQ: '', auditQ: '', sourceForm: null, modal: null, toast: null, animating: new Set(), auto: false, payloadView: null,
-    // Send to NSIPA Registry. Keys live in this object only (page memory), never in storage.
+    // Sent to NSIPA Registry. Keys live in this object only (page memory), never in storage.
     nsr: { key: '', submitKey: '', operator: '', cfg: null, households: null, deliveries: null, selected: [], preview: null, result: null, confirm: false, busy: false, error: null, notes: {}, auto: true },
     // Add Records transfers not yet on the server, the latest save, and the latest automatic send. Page memory: a reload loses them.
     unsaved: [], save: null, autoSend: null,
@@ -482,7 +482,7 @@
     const at = attentionTotals();
     const all = newest(S.runs, (r) => r.createdAt);
     const runs = UI.tstatus ? all.filter((r) => T.simpleStatus(runState(r)).label === UI.tstatus) : all;
-    const views = [['list', 'All Transfers'], ['attention', `Needs Attention (${num(at.total)})`]].concat(E.can('nsr.preview') ? [['nsr', 'Send to NSIPA Registry']] : []);
+    const views = [['list', 'All Transfers'], ['attention', `Needs Attention (${num(at.total)})`]].concat(E.can('nsr.preview') ? [['nsr', 'Sent to NSIPA Registry']] : []);
     if (UI.tview === 'nsr' && !E.can('nsr.preview')) UI.tview = 'list';
     const body = UI.tview === 'attention' ? attentionView() : UI.tview === 'nsr' ? nsrView() : html`
       <div class="filters"><label class="field">Status<select data-change="bind" data-key="tstatus"><option value="">All</option>${T.SIMPLE_STATUSES.map((l) => html`<option value="${l}" ${raw(UI.tstatus === l ? 'selected' : '')}>${l}</option>`)}</select></label></div>
@@ -502,7 +502,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Send to NSIPA Registry: the outbound OpenG2P NSR webhook, through the DataBridge API (/api/v1/nsr/...).
+  // Sent to NSIPA Registry: the outbound OpenG2P NSR webhook, through the DataBridge API (/api/v1/nsr/...).
   // The server decides who may submit (DATABRIDGE_NSR_SUBMIT_KEY); the role check here only shapes the screen.
   // ---------------------------------------------------------------------------
   const NSR_STATUS = {
@@ -517,8 +517,8 @@
     DUPLICATE_MEMBER: 'The same person appears twice.', HOUSEHOLD_FIELD_CONFLICT: 'Members have different household details, for example the address.',
     MIXED_SYNTHETIC: 'Test and real records are mixed.', SYNTHETIC_NOT_ALLOWED: 'Test records cannot be sent to the NSIPA Registry here.',
     TOO_MANY_MEMBERS: 'Too many members for one submission.', HOUSEHOLD_NOT_FOUND: 'Household not found.',
-    NSR_WEBHOOK_DISABLED: 'Sending to the NSIPA Registry is switched off in this environment.', NSR_AUTO_SEND_DISABLED: 'Automatic sending is switched off in this environment. The records are saved: send them from Send to NSIPA Registry.',
-    ALREADY_ACCEPTED: 'Already sent and received by the NSIPA Registry.', DELIVERY_IN_PROGRESS: 'Already being sent.', ACCEPTED_BEFORE_CHANGED: 'Changed since the NSIPA Registry received it. Send it again manually from Send to NSIPA Registry.',
+    NSR_WEBHOOK_DISABLED: 'Sending to the NSIPA Registry is switched off in this environment.', NSR_AUTO_SEND_DISABLED: 'Automatic sending is switched off in this environment. The records are saved: send them from Sent to NSIPA Registry.',
+    ALREADY_ACCEPTED: 'Already sent and received by the NSIPA Registry.', DELIVERY_IN_PROGRESS: 'Already being sent.', ACCEPTED_BEFORE_CHANGED: 'Changed since the NSIPA Registry received it. Send it again manually from Sent to NSIPA Registry.',
     NSR_SUBMIT_FORBIDDEN: 'This key cannot send to the NSIPA Registry. Enter the NSIPA Registry submit key.',
     UNAUTHORISED: 'The API key was not accepted.', OPERATOR_REQUIRED: 'Enter your name or operator ID.', DUPLICATE_SUBMISSION: 'Already sent, or being sent.',
     BATCH_TOO_LARGE: 'Too many households at once. Select fewer.', VALIDATION_FAILED: 'Some households need correction first.',
@@ -592,7 +592,7 @@
     const send = p && canSend ? html`<section class="panel"><header><h3>3. Send</h3></header><div class="body stack">
         ${!n.cfg.enabled ? html`<div class="callout warn">${nsrReason('NSR_WEBHOOK_DISABLED')}</div>` : ''}
         <label class="row confirm"><input type="checkbox" id="nsr-confirm" data-bind="nsr.confirm" data-type="check" ${raw(n.confirm ? 'checked' : '')}> I have reviewed ${num(p.households.length)} household(s) and want to send them to the NSIPA Registry.</label>
-        <div class="btns"><button class="btn primary" data-act="nsr-submit" ${dis('nsr.submit')} ${raw(!sendable || !n.confirm || n.busy || !n.submitKey || !n.operator ? 'disabled' : '')}>Send to NSIPA Registry</button></div>
+        <div class="btns"><button class="btn primary" data-act="nsr-submit" ${dis('nsr.submit')} ${raw(!sendable || !n.confirm || n.busy || !n.submitKey || !n.operator ? 'disabled' : '')}>Sent to NSIPA Registry</button></div>
       </div></section>` : '';
 
     const r = n.result;
@@ -1049,17 +1049,17 @@
     const attn = r.tone === 'crit' || run.records.some((x) => recordState(x, open)[0] === 'Needs Attention');
     return html`${resultBox(r)}${savePanel(run)}<div class="btns"><button class="btn" data-act="run" data-arg="${run.id}">${attn ? 'View Issues' : 'View Details'}</button><button class="btn primary lg" data-act="wiz-done">Done</button></div>`;
   }
-  // Keys stay in page memory, so an operator enters them once per page. Without all three, records wait on Send to NSIPA Registry.
+  // Keys stay in page memory, so an operator enters them once per page. Without all three, records wait on Sent to NSIPA Registry.
   function autoSendFields() {
     if (!E.can('nsr.submit')) return '';
     const n = UI.nsr;
-    return html`<section class="panel"><header><h3>Send to NSIPA Registry</h3></header><div class="body stack">
-      <label class="row confirm"><input type="checkbox" id="wiz-auto" data-bind="nsr.auto" data-type="check" ${raw(n.auto ? 'checked' : '')}> Send to the NSIPA Registry automatically after submitting</label>
+    return html`<section class="panel"><header><h3>Sent to NSIPA Registry</h3></header><div class="body stack">
+      <label class="row confirm"><input type="checkbox" id="wiz-auto" data-bind="nsr.auto" data-type="check" ${raw(n.auto ? 'checked' : '')}> Sent to the NSIPA Registry automatically after submitting</label>
       ${n.auto ? html`<div class="filters">
         <label class="field">API key<input type="password" id="wiz-send-key" autocomplete="off" data-live data-bind="nsr.key" value="${n.key}"></label>
         <label class="field">NSIPA Registry submit key<input type="password" id="wiz-send-submit-key" autocomplete="off" data-live data-bind="nsr.submitKey" value="${n.submitKey}"></label>
         <label class="field">Your name or ID<input id="wiz-send-operator" autocomplete="off" data-live data-bind="nsr.operator" value="${n.operator}" maxlength="64"></label>
-      </div><div class="small muted">Valid households go to the NSIPA Registry with no further check. Keys stay in this page only.${autoReady() ? '' : ' Without all three, records wait for you on Send to NSIPA Registry.'}</div>` : ''}
+      </div><div class="small muted">Valid households go to the NSIPA Registry with no further check. Keys stay in this page only.${autoReady() ? '' : ' Without all three, records wait for you on Sent to NSIPA Registry.'}</div>` : ''}
     </div></section>`;
   }
   const autoReady = () => { const n = UI.nsr; return n.auto && n.key && n.submitKey && n.operator && E.can('nsr.submit'); };
@@ -1081,20 +1081,20 @@
       ${a.queued_households ? html`<div class="callout ok" role="status"><b>${num(a.queued_households)} households queued for the NSIPA Registry in ${num(a.deliveries.length)} ${a.deliveries.length === 1 ? 'send' : 'sends'}.</b><div>They go in the background, so you can close this page. Follow them in Send History.</div></div>` : ''}
       ${a.skipped.length ? html`<div class="callout warn" role="status"><b>${num(a.skipped.length)} households not sent.</b><ul class="small">${pagedList(`auto-skipped:${a.runId}`, a.skipped, (s) => html`<li>${s.household_serial}: ${s.codes.map(nsrReason).join(' ')}</li>`)}</ul></div>` : ''}`;
   }
-  // Transfers run in this browser only. Send to NSIPA Registry reads the server, so processed records are saved there explicitly.
+  // Transfers run in this browser only. Sent to NSIPA Registry reads the server, so processed records are saved there explicitly.
   const savable = (run) => run.records.filter((r) => r.primary.masterId);
   function savePanel(run) {
     const count = savable(run).length;
     if (!count || !E.can('run.start')) return '';
     const s = UI.save && UI.save.runId === run.id ? UI.save : null;
     const saved = s && !s.busy && s.done > 0;
-    return html`<section class="panel"><header><h3>Save for Send to NSIPA Registry</h3></header><div class="body stack">
-      <p style="margin:0">${num(count)} records are ready. Save them here, or connect on Send to NSIPA Registry.</p>
+    return html`<section class="panel"><header><h3>Save for Sent to NSIPA Registry</h3></header><div class="body stack">
+      <p style="margin:0">${num(count)} records are ready. Save them here, or connect on Sent to NSIPA Registry.</p>
       <label class="field">API key<input type="password" id="wiz-api-key" autocomplete="off" data-live data-bind="nsr.key" value="${UI.nsr.key}"></label>
       ${s ? saveNote(s) : ''}
       ${UI.autoSend && UI.autoSend.runId === run.id ? autoNote(UI.autoSend) : ''}
       <div class="btns"><button class="btn primary" data-act="wiz-save" ${raw(!UI.nsr.key || (s && s.busy) ? 'disabled' : '')}>${s && s.busy ? `Saving ${num(s.done)} of ${num(s.total)}` : 'Save to Server'}</button>
-      ${saved && E.can('nsr.preview') ? html`<button class="btn" data-act="wiz-open-nsr">Open Send to NSIPA Registry</button>` : ''}</div></div></section>`;
+      ${saved && E.can('nsr.preview') ? html`<button class="btn" data-act="wiz-open-nsr">Open Sent to NSIPA Registry</button>` : ''}</div></div></section>`;
   }
   function saveNote(s) {
     return html`${s.error ? html`<div class="callout crit" role="alert"><b>${nsrReason(s.error)}</b></div>` : ''}
