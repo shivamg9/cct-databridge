@@ -14,7 +14,10 @@ const ROOT = path.join(__dirname, '../prototype');
 const CODE = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function boot() {
+const ACCOUNTS = { INGESTION_OPERATOR: ['operator@databridge.com', 'Operator@123'], PLATFORM_ADMIN: ['admin@databridge.com', 'Admin@123'] };
+
+// Boots the console and signs in as the Operator (opts.signedOut leaves it on the sign-in screen).
+function boot(opts) {
   const src = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/<script src="[^"]+"><\/script>/g, '');
   const dom = new JSDOM(`<!doctype html><html><head></head><body>${src}</body></html>`, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'http://localhost/index.html' });
   const w = dom.window;
@@ -26,13 +29,21 @@ function boot() {
   const $ = (sel) => d.querySelector(sel);
   const $$ = (sel) => [...d.querySelectorAll(sel)];
   const click = (sel) => { const el = typeof sel === 'string' ? $(sel) : sel; assert.ok(el, `missing ${sel}`); el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); };
-  const role = (v) => { const el = $('#role'); el.value = v; el.dispatchEvent(new w.Event('change', { bubbles: true })); };
+  const signIn = (email, password) => {
+    const e = $('#login-email'); e.value = email; e.dispatchEvent(new w.Event('input', { bubbles: true }));
+    $('#login-password').value = password;
+    click('[data-act="login"]');
+  };
+  const signOut = () => click('[data-act="logout"]');
+  // The role now comes from the account: sign out, then sign in as that role's mock user.
+  const role = (v) => { assert.ok(ACCOUNTS[v], `no mock account for ${v}`); signOut(); signIn(...ACCOUNTS[v]); };
   const text = () => $('main.content').textContent.replace(/\s+/g, ' ');
   const nav = () => $$('.nav-btn').map((b) => b.firstChild.textContent.trim());
   const button = (label) => $$('main button').find((b) => b.textContent.trim().startsWith(label));
   const failed = () => /failed to render/.test(text());
   async function until(fn, ms) { const end = Date.now() + (ms || 15000); while (Date.now() < end) { if (fn()) return; await sleep(100); } assert.fail('timed out'); }
-  return { w, d, $, $$, click, role, text, nav, button, failed, until, errors };
+  if (!(opts && opts.signedOut)) signIn(...ACCOUNTS.INGESTION_OPERATOR);
+  return { w, d, $, $$, click, role, signIn, signOut, text, nav, button, failed, until, errors };
 }
 
 test('operators see four plain sections at most, and no Settings', { skip }, () => {
@@ -49,9 +60,9 @@ test('operators see four plain sections at most, and no Settings', { skip }, () 
   assert.equal(u.$('h1').textContent, 'Home');
   u.role('PLATFORM_ADMIN');
   assert.deepEqual(u.nav(), ['Home', 'Add Records', 'Transfers', 'Settings']);
-  u.role('READ_ONLY');
-  assert.ok(!u.nav().includes('Settings'));
-  assert.ok(u.button('Add Records').disabled, 'read-only cannot start transfers');
+  u.role('INGESTION_OPERATOR');
+  assert.ok(!u.nav().includes('Settings'), 'signing back in as the Operator hides Settings again');
+  assert.ok(!u.button('Add Records').disabled, 'the Operator can start transfers');
   assert.deepEqual(u.errors, []);
 });
 
@@ -140,6 +151,8 @@ test('transfer details: a short summary for operators, Advanced Details for auth
   assert.ok(u.$('.callout.result'));
   assert.ok(!/Advanced Details/.test(u.text()));
   u.role('PLATFORM_ADMIN');
+  u.click('[data-act="nav"][data-arg="runs"]');
+  u.click(u.$('[data-act="run"]'));
   const adv = u.$$('details.tech').find((x) => /Advanced Details/.test(x.querySelector('summary').textContent));
   assert.ok(adv, 'admins can open Advanced Details');
   adv.open = true; adv.dispatchEvent(new u.w.Event('toggle'));
@@ -188,9 +201,8 @@ test('Send to NSIPA Registry: permitted roles only; check, review and send throu
   };
   const type = (sel, v) => { const el = u.$(sel); el.value = v; el.dispatchEvent(new u.w.Event('input', { bubbles: true })); };
   u.click('[data-act="nav"][data-arg="runs"]');
-  u.role('READ_ONLY');
-  assert.ok(!u.$('[data-act="tview"][data-arg="nsr"]'), 'read-only users do not see it');
   u.role('INGESTION_OPERATOR');
+  u.click('[data-act="nav"][data-arg="runs"]');
   u.click('[data-act="tview"][data-arg="nsr"]');
   type('#nsr-key', 'standard-key-ui');
   await u.until(() => !u.button('Connect').disabled);
@@ -217,7 +229,7 @@ test('Send to NSIPA Registry: permitted roles only; check, review and send throu
   assert.ok(calls.filter((c) => !c.url.endsWith('/submit')).every((c) => c.headers['X-API-Key'] === 'standard-key-ui'), 'reads use the standard key');
   const stored = JSON.stringify({ ...u.w.localStorage }) + JSON.stringify({ ...u.w.sessionStorage });
   assert.doesNotMatch(stored, /submit-key-ui|standard-key-ui/, 'keys are never stored');
-  assert.deepEqual(u.$$('#role option').map((o) => o.textContent), ['Platform Admin', 'Operator', 'Read-only'], 'three roles to switch between');
+  assert.ok(!u.$('#role'), 'no role switcher: the account decides the role');
   assert.ok(!u.failed());
   assert.deepEqual(u.errors, []);
 });
@@ -475,7 +487,8 @@ test('wording: NSIPA Registry, Sample Files, NASSCO National Social Registry fir
   }
   assert.match(u.text(), /Legacy Pilot List/, 'configured names are shown without CCT');
   assert.equal(u.$('.brand').textContent.trim(), 'DataBridge');
-  assert.equal(u.$('.module-name').textContent, 'DataBridge');
+  assert.ok(!u.$('.module-name'), 'no product name beside the time');
+  assert.equal(u.$('.strip').textContent.trim(), '', 'the top strip is a plain line');
   assert.match(u.$('.clock').textContent.trim(), /^\d{1,2} [A-Z][a-z]{2} \d\d:\d\d$/);
   assert.ok(!u.$('[data-act="clock"]') && !u.$('[data-act="auto"]'), 'no +30 s, +3 min or Play');
   assert.equal(u.d.title || 'DataBridge', 'DataBridge');
@@ -490,5 +503,90 @@ test('wording: NSIPA Registry, Sample Files, NASSCO National Social Registry fir
   u.click('main [data-act="nav"][data-arg="mapping"]');
   u.click('[data-act="maptab"][data-arg="schema"]');
   assert.doesNotMatch(u.$('#app').textContent, /(?<![\w-])NSR(?![\w-])/, 'schema labels are reworded at display time');
+  assert.deepEqual(u.errors, []);
+});
+
+test('sign in: welcome on the left, email and password on the right; two mock accounts decide what is shown', { skip }, () => {
+  const u = boot({ signedOut: true });
+  assert.ok(u.$('.login'), 'opens on the sign-in screen');
+  assert.match(u.$('.login-welcome').textContent, /Welcome to DataBridge/);
+  assert.ok(u.$('.login-panel #login-email') && u.$('.login-panel #login-password'));
+  assert.ok(!u.$('.nav-btn') && !u.$('main.content'), 'nothing of the console before sign-in');
+  u.click('[data-act="login"]');
+  assert.match(u.$('.login').textContent, /Enter your email and password\./);
+  u.signIn('operator@databridge.com', 'wrong');
+  assert.match(u.$('.login').textContent, /Incorrect email or password\./);
+  assert.equal(u.$('#login-email').value, 'operator@databridge.com', 'the email stays filled in');
+  assert.equal(u.$('#login-password').value, '', 'the password does not');
+  assert.ok(!u.$('.nav-btn'));
+  u.$('#login-password').value = 'secret';
+  u.click('[data-act="pw-toggle"]');
+  assert.equal(u.$('#login-password').type, 'text');
+  assert.equal(u.$('#login-password').value, 'secret', 'Show keeps what was typed');
+  u.click('[data-act="pw-toggle"]');
+  assert.equal(u.$('#login-password').type, 'password');
+  u.signIn('Operator@DataBridge.com ', 'Operator@123');
+  assert.deepEqual(u.nav(), ['Home', 'Add Records', 'Transfers'], 'Operator: no Settings');
+  assert.equal(u.$('.who-name').textContent, 'Operator');
+  assert.equal(u.$('.who').textContent.match(/Operator/g).length, 1, 'the name is shown once');
+  assert.equal(u.$$('.who .avatar svg').length, 1, 'one profile icon');
+  assert.equal(u.w.sessionStorage.getItem('databridge.user'), 'operator@databridge.com', 'the session holds the email only');
+  assert.doesNotMatch(JSON.stringify({ ...u.w.sessionStorage }) + JSON.stringify({ ...u.w.localStorage }), /Operator@123|Admin@123/, 'no password is stored');
+  u.signOut();
+  assert.ok(u.$('.login'), 'Log out returns to the sign-in screen');
+  assert.equal(u.w.sessionStorage.getItem('databridge.user'), null);
+  u.signIn('admin@databridge.com', 'Admin@123');
+  assert.deepEqual(u.nav(), ['Home', 'Add Records', 'Transfers', 'Settings'], 'Admin: Settings');
+  assert.equal(u.$('.rail-role').textContent.trim(), 'Signed in asAdmin');
+  assert.equal(u.$('.who').textContent.match(/Admin/g).length, 1, 'Admin is shown once');
+  u.click('[data-act="nav"][data-arg="settings"]');
+  assert.equal(u.$('h1').textContent, 'Settings');
+  u.signOut();
+  u.signIn('operator@databridge.com', 'Operator@123');
+  assert.equal(u.$('h1').textContent, 'Home', 'the next user starts on Home');
+  assert.deepEqual(u.errors, []);
+});
+
+test('one registry (NSIPA Registry), two roles, API-only connection checks and a short Add source form', { skip }, () => {
+  const u = boot();
+  u.role('PLATFORM_ADMIN');
+  const settings = ['sources', 'mapping', 'destinations', 'audit', 'security', 'recon', 'errors', 'quality', 'lineage', 'architecture'];
+  const check = (where) => {
+    // Open every collapsed section so hidden text is checked too.
+    u.$$('#app details').forEach((d) => { d.open = true; });
+    assert.doesNotMatch(u.$('#app').textContent, /Master Registry|Registry [12]\b|Replicat|Read-only|\bSR[12]\b/, where);
+  };
+  for (const p of ['home', 'ingest', 'runs']) { u.click(`[data-act="nav"][data-arg="${p}"]`); check(p); }
+  for (const p of settings) { u.click('[data-act="nav"][data-arg="settings"]'); u.click(`main .choice [data-act="nav"][data-arg="${p}"]`); check(p); }
+  const open = (p) => { u.click('[data-act="nav"][data-arg="settings"]'); u.click(`main .choice [data-act="nav"][data-arg="${p}"]`); };
+  // Destinations: a single NSIPA Registry card.
+  open('destinations');
+  assert.deepEqual(u.$$('main .panel h3').map((h) => h.textContent.trim()).filter((x) => /Registry/.test(x)), ['NSIPA Registry']);
+  // Access control: Platform Admin and Operator only.
+  open('security');
+  assert.deepEqual([...u.$$('main table')[0].querySelectorAll('thead th')].map((th) => th.textContent.trim()).slice(1), ['Platform Admin', 'Operator']);
+  // Sources: Check connection only for API sources; no New transfer on the list.
+  open('sources');
+  assert.doesNotMatch(u.$('main').textContent, /New transfer/i, 'no New transfer on Sources');
+  const rows = u.$$('main tbody tr');
+  assert.ok(rows.length > 1);
+  for (const tr of rows) {
+    assert.equal(!!tr.querySelector('[data-act="source-test"]'), /API/.test(tr.children[1].textContent), `${tr.children[0].textContent.trim()}: Check connection only for API`);
+  }
+  u.click('main [data-act="source"][data-arg="SRC-LGA-UPLOAD"]');
+  assert.ok(!u.$('main .grid [data-act="source-test"]') && !/Connection/.test(u.$('main .grid').textContent), 'a file-upload source has no connection panel');
+  u.click('main [data-act="source"][data-arg="SRC-NSR-NASSCO"]');
+  assert.ok(u.$('main .grid [data-act="source-test"]'), 'an API source keeps its connection panel');
+  // Add source: no Advanced section; the ID comes from the name.
+  u.click('[data-act="source-new"]');
+  assert.doesNotMatch(u.$('.modal').textContent, /Advanced/, 'no Advanced section');
+  assert.ok(!u.$('#sf-id') && !u.$('#sf-layout') && !u.$('#sf-schemaVersion'));
+  const set = (id, v) => { const el = u.$(id); el.value = v; el.dispatchEvent(new u.w.Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); };
+  set('#sf-name', 'Kaduna State Registry');
+  set('#sf-connection', 'IMPORT');
+  assert.ok(!u.$('#sf-baseUrl'), 'file upload asks for no address');
+  u.click('[data-act="source-save"]');
+  assert.ok(!u.$('.modal'), 'saved');
+  assert.ok(u.$('main [data-act="source"][data-arg="SRC-KADUNA-STATE-REGISTRY"]'), 'ID made from the name');
   assert.deepEqual(u.errors, []);
 });

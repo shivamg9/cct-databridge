@@ -5,11 +5,18 @@
   'use strict';
   const DB = window.DataBridge;
   const SCHEMA = window.NSR_SCHEMA;
-  const E = DB.createEngine(SCHEMA, { seed: 20261027 });
+  const E = DB.createEngine(SCHEMA, { seed: 20261027, replica: false });
   DB.seedDemo(E);
   const S = E.state;
   const T = window.UiTerms;
-  // The console opens as the everyday user. Switch roles with "Acting as" to see Settings.
+  // Mock sign-in. Two demo accounts decide what the console shows: the Operator never sees Settings,
+  // the Admin does. This only shapes the screen; the DataBridge API is still protected by its own keys.
+  const USERS = [
+    { email: 'operator@databridge.com', password: 'Operator@123', name: 'Operator', role: 'INGESTION_OPERATOR' },
+    { email: 'admin@databridge.com', password: 'Admin@123', name: 'Admin', role: 'PLATFORM_ADMIN' },
+  ];
+  const SESSION_KEY = 'databridge.user';
+  const findUser = (email) => USERS.find((u) => u.email === String(email || '').trim().toLowerCase());
   E.setRole('INGESTION_OPERATOR');
   const FIELD = Object.fromEntries(SCHEMA.fields.map((f) => [f.name, f]));
   const DAY = 86400000;
@@ -107,6 +114,8 @@
     unsaved: [], save: null, autoSend: null,
     // The page each list is on ({ key: { page, sig } }), and the cells opened to show every value.
     pages: {}, expanded: new Set(),
+    // The signed-in mock user, and the sign-in form. The password is read from the field, never kept here.
+    user: null, login: { email: '', error: '' },
   };
   function newWizard() { return { step: 1, sourceId: '', mode: '', file: null, upload: null, headerCheck: null, sim: {}, dry: null, ack: false, testResult: null, runId: null, showIssues: false }; }
 
@@ -304,24 +313,24 @@
   // Which of the four sections a page belongs to.
   const section = (p) => (p === 'run' ? 'runs' : T.SETTINGS_PAGES.includes(p) ? 'settings' : p);
 
+  const PROFILE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>';
   function shell(content) {
     const nc = navCounts();
     const nav = T.NAV.filter(([k]) => k !== 'settings' || techAllowed());
-    return html`<div class="strip"><span>DataBridge</span></div>
+    return html`<div class="strip" aria-hidden="true"></div>
       <div class="shell">
       <nav class="rail" aria-label="Main">
         <div class="brand"><span class="brand-word">DataBridge</span></div>
         <div class="nav-wrap"><div class="nav-group">${nav.map(([k, l]) => html`
           <button class="nav-btn" data-act="nav" data-arg="${k}" ${raw(section(UI.page) === k ? 'aria-current="page"' : '')}>${l}
           ${k === 'runs' && nc.attention ? html`<span class="nav-count" title="Needs Attention">${nc.attention}</span>` : ''}</button>`)}</div></div>
-        <div class="rail-role"><b>Role</b>${roleName(S.role)}</div>
+        <div class="rail-role"><b>Signed in as</b>${UI.user.name}</div>
       </nav>
       <div class="main">
         <header class="topbar">
-          <div class="env"><span class="module-name">DataBridge</span></div>
           <div class="clock"><time>${fmtTime(S.now, false)}</time></div>
-          <div class="who"><label for="role">Acting as</label>
-            <select id="role" data-change="role">${Object.keys(DB.ROLES).map((k) => html`<option value="${k}" ${raw(S.role === k ? 'selected' : '')}>${roleName(k)}</option>`)}</select></div>
+          <div class="who"><span class="avatar" aria-hidden="true">${raw(PROFILE_ICON)}</span><span class="who-name" title="${UI.user.email}">${UI.user.name}</span>
+            <button class="btn sm" data-act="logout">Log out</button></div>
         </header>
         <main class="content">${content}</main>
       </div></div>
@@ -398,11 +407,8 @@
           ${legend([{ name: 'API', color: C.s1 }, { name: 'File upload', color: C.s2 }])}
           ${columns({ cats: tp.map((t) => ({ label: '', tip: fmtTime(t.at, false) })), series: [{ name: 'API', color: C.s1, values: tp.map((t) => (t.mode === 'API' ? t.perMin : 0)) }, { name: 'File upload', color: C.s2, values: tp.map((t) => (t.mode === 'IMPORT' ? t.perMin : 0)) }], xLabel: 'oldest → newest' })}
           ${chartTable('chart-throughput', ['Transfer', 'Method', 'Records/min'], newest(tp, (t) => t.at).map((t) => [fmtTime(t.at, false), T.modeLabel(t.mode), t.perMin]))}</div></section>
-        <section class="panel c6"><header><h3>Retries per day</h3></header><div class="body">
+        <section class="panel c12"><header><h3>Retries per day</h3></header><div class="body">
           ${columns({ cats: dayCats, totals: true, series: [{ name: 'Retries', color: C.s4, values: a.byDay.map((d) => d.retries) }] })}</div></section>
-        <section class="panel c6"><header><h3>Replication lag</h3><span class="sub">Seconds, per transfer</span></header><div class="body">
-          ${legend([{ name: 'Max', color: C.s2 }, { name: 'Average', color: C.s1 }])}
-          ${a.lagByRun.length ? lines({ cats: a.lagByRun.map((l) => ({ label: fmtTime(l.at, false).replace(/ \d\d:\d\d$/, ''), tip: fmtTime(l.at, false) })), series: [{ name: 'Max', color: C.s2, values: a.lagByRun.map((l) => +l.maxS.toFixed(1)) }, { name: 'Average', color: C.s1, values: a.lagByRun.map((l) => +l.avgS.toFixed(1)) }], fmt: (v) => `${v}s`, threshold: { value: S.destinations[1].lagThresholdMs / 1000, label: 'threshold 60 s' } }) : html`<div class="empty">No replication data.</div>`}</div></section>
         <section class="panel c12"><header><h3>Exceptions by source</h3></header><div class="body">
           ${legend(sids.map((sid) => ({ name: srcName(sid), color: srcColor(sid) })))}
           ${sids.length ? lines({ cats: dayCats, series: sids.map((sid) => ({ name: srcName(sid), color: srcColor(sid), values: a.days.map((d) => a.errorTrend[sid][d]) })) }) : html`<div class="empty">No exceptions.</div>`}</div></section>
@@ -436,12 +442,7 @@
         if (rc.unknown) [state, tone] = ['Outcome unknown', 'crit'];
         else if (rc.awaitingRetry || rc.inFlight) [state, tone] = ['Partial', 'warn'];
       }
-      if (i === 3 && done) {
-        note = `${num(rc.replicaConfirmed)} replicated`;
-        if (rc.replicaFailed) [state, tone] = ['Failed', 'crit'];
-        else if (rc.replicaPending) [state, tone] = ['Pending', 'warn'];
-      }
-      if (i === 4 && ended && !run.fatal && !run.blocked && !run.dryRun && !['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(st)) [state, tone, note] = ['Open', 'warn', T.runStatus(st).label];
+      if (i === T.JOURNEY.length - 1 && ended && !run.fatal && !run.blocked && !run.dryRun && !['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(st)) [state, tone, note] = ['Open', 'warn', T.runStatus(st).label];
       return { name, state, tone, note };
     });
   }
@@ -462,9 +463,6 @@
     if (rc.unknown) parts.push(`${num(rc.unknown)} outcome unknown`);
     if (pending) parts.push(`${num(pending)} retry scheduled`);
     if (review) parts.push(`${num(review)} exceptions`);
-    if (rc.replicaFailed) parts.push(`${num(rc.replicaFailed)} not replicated`);
-    else if (rc.replicaPending) parts.push('replication pending');
-    else if (rc.primaryWritten) parts.push('replicated');
     const s = T.runStatus(st);
     return { tone: st === 'COMPLETED' ? 'good' : ['NEEDS_RECONCILIATION', 'REPLICA_FAILED'].includes(st) ? 'crit' : 'warn', title: `${s.label}.`, text: `${parts.join(' · ')}.` };
   }
@@ -657,8 +655,6 @@
     if (by['Needs Attention']) parts.push(`${num(by['Needs Attention'])} ${by['Needs Attention'] === 1 ? 'needs' : 'need'} attention.`);
     if (by.Processing) parts.push(`${num(by.Processing)} processing.`);
     if (by.Skipped) parts.push(`${n(by.Skipped, 'duplicate', 'duplicates')} skipped.`);
-    // Written to Master Registry 1, copy to Master Registry 2 not yet confirmed.
-    if (rc.replicaPending && !by['Needs Attention']) parts.push('Final check in progress.');
     const x = T.simpleStatus(st);
     const title = { Completed: 'Transfer completed', Processing: 'Transfer processing', Failed: 'Transfer failed' }[x.label] || 'Transfer needs attention';
     return { tone: x.tone === 'good' ? 'good' : x.tone === 'crit' ? 'crit' : x.tone === 'warn' ? 'warn' : '', title, text: parts.join(' ') };
@@ -669,7 +665,6 @@
     ['all', 'All', () => true], ['invalid', 'Invalid', (r) => E.classify(r) === 'INVALID'], ['dup', 'Duplicate in file', (r) => r.dedup.status === 'DUPLICATE_IN_BATCH'],
     ['review', 'Possible duplicate', (r) => ['MATCH_REVIEW', 'APPROVED_NEW', 'REJECTED_REVIEW'].includes(r.dedup.status)], ['written', 'Written', (r) => r.primary.status === 'WRITTEN'],
     ['retry', 'Retry scheduled', (r) => r.primary.status === 'AWAITING_RETRY'], ['unknown', 'Outcome unknown', (r) => r.primary.status === 'UNKNOWN'], ['dead', 'Write failed', (r) => r.primary.status === 'DEAD_LETTER'],
-    ['r2p', 'Replication pending', (r) => r.replica.status === 'PENDING'], ['r2f', 'Replication failed', (r) => r.replica.status === 'FAILED'],
   ];
   // The most useful short fact about a record.
   function recordIssue(r) {
@@ -682,8 +677,6 @@
     if (p === 'AWAITING_RETRY') return `Retry ${r.primary.nextRetryAt <= S.now ? 'due now' : rel(r.primary.nextRetryAt)}.`;
     if (p === 'UNKNOWN') return 'Write not confirmed. Reconcile.';
     if (p === 'DEAD_LETTER') return r.fault && r.fault.kind === 'permanent' ? 'Rejected by registry. Correct at source.' : `Failed after ${r.primary.attempts.length} attempts. Retry is safe.`;
-    if (r.replica.status === 'FAILED') return 'Not found in Master Registry 2.';
-    if (r.replica.status === 'PENDING' && p === 'WRITTEN') return 'Replication pending.';
     if (r.primary.duplicatePrevented) return 'Resent; duplicate write prevented.';
     return '';
   }
@@ -691,11 +684,11 @@
     ${STUCK.includes(r.primary.status) ? html`<button class="btn sm" data-act="retry-rec" data-arg="${r.id}" ${dis('run.retry')} ${raw(r.fault && r.fault.kind === 'permanent' && r.primary.status === 'DEAD_LETTER' ? 'disabled title="Rejected by the registry. Correct at source and resend."' : '')}>Retry</button>` : ''}
     ${r.dedup.status === 'MATCH_REVIEW' ? html`<button class="btn sm" data-act="review" data-arg="${r.id}" ${dis('error.resolve')}>Review</button>` : ''}</div>`;
   function recordsTable(recs, withSource, key, sig) {
-    const cols = [['Record', 190]].concat(withSource ? [['Source', 200]] : [], [['Person (masked)', 190], ['Validation', 160], ['Registry 1', 160], ['Registry 2', 150], ['Detail', ''], ['', 210]]);
+    const cols = [['Record', 190]].concat(withSource ? [['Source', 200]] : [], [['Person (masked)', 190], ['Validation', 160], ['NSIPA Registry', 170], ['Detail', ''], ['', 210]]);
     return table({ key, sig, items: recs, empty: 'No records.', cols,
       row: (r) => html`<tr><td class="small">${r.sourceRecordId} <span class="muted">· row ${r.id.slice(-4)}</span></td>${withSource ? html`<td class="small">${srcName(r.sourceId)}</td>` : ''}<td>${person(r)}</td>
         <td>${E.classify(r) === 'INVALID' ? pill('validation', 'INVALID') : ['DUPLICATE_IN_BATCH', 'MATCH_REVIEW', 'REJECTED_REVIEW'].includes(r.dedup.status) ? pill('dedup', r.dedup.status) : pill('validation', r.validation.status)}</td>
-        <td>${pill('primary', r.primary.status)}</td><td>${pill('replica', r.replica.status)}</td><td class="small">${recordIssue(r)}</td><td>${recordActions(r)}</td></tr>` });
+        <td>${pill('primary', r.primary.status)}</td><td class="small">${recordIssue(r)}</td><td>${recordActions(r)}</td></tr>` });
   }
   // Exceptions for one transfer, grouped by type, all states.
   function issueSummary(errors, key) {
@@ -720,7 +713,7 @@
     const open = attentionIds();
     const attn = run.records.filter((r) => recordState(r, open)[0] === 'Needs Attention');
     const canRetry = rc.awaitingRetry + rc.primaryFailed + rc.unknown;
-    const canCheck = rc.unknown + rc.replicaFailed;
+    const canCheck = rc.unknown;
     const actions = html`${canCheck ? html`<button class="btn primary" data-act="reconcile" data-arg="${run.id}" ${dis('run.reconcile')}>Reconcile</button>` : ''}${canRetry ? html`<button class="btn ${canCheck ? '' : 'primary'}" data-act="retry-run" data-arg="${run.id}" ${dis('run.retry')}>Retry</button>` : ''}`;
     return html`${head(run.sourceName, null, actions, html`<button data-act="nav" data-arg="runs">Transfers</button>`)}
       ${resultBox(simpleResult(run, open))}
@@ -756,9 +749,9 @@
     else body = auditTable(S.audit.filter((a) => a.target.includes(run.id)), `run-audit:${run.id}`);
 
     const s = E.getSource(run.sourceId);
-    const pend = rc.awaitingRetry + rc.unknown + rc.inFlight + rc.replicaPending;
-    const exc = rc.rejectedBeforeDelivery + rc.heldForReview + rc.primaryFailed + rc.replicaFailed;
-    const tiles = [['Received', rc.received, ''], ['Written', rc.primaryWritten, 'good'], ['Replicated', rc.replicaConfirmed, ''], ['Pending', pend, pend ? 'warn' : ''], ['Exceptions', exc, exc ? 'serious' : '']];
+    const pend = rc.awaitingRetry + rc.unknown + rc.inFlight;
+    const exc = rc.rejectedBeforeDelivery + rc.heldForReview + rc.primaryFailed;
+    const tiles = [['Received', rc.received, ''], ['Written', rc.primaryWritten, 'good'], ['Pending', pend, pend ? 'warn' : ''], ['Exceptions', exc, exc ? 'serious' : '']];
     return html`<div class="stack">
       <p style="margin:0">Status: ${pill('run', runState(run))}</p>
       ${journeyView(run)}
@@ -848,13 +841,12 @@
     ['notSent', 'Not sent', ['rejectedBeforeDelivery', 'notProcessed'], 'Invalid, duplicate or stopped'],
     ['review', 'Exceptions', ['heldForReview', 'primaryFailed'], 'Possible duplicates, write failures'],
     ['processing', 'Pending', ['awaitingRetry', 'unknown', 'inFlight'], 'Retry or unconfirmed'],
-    ['added', 'Written', ['primaryWritten'], 'Master Registry 1'],
-    ['copied', 'Replicated', ['replicaConfirmed'], 'Master Registry 2'],
+    ['added', 'Written', ['primaryWritten'], 'NSIPA Registry'],
   ];
   const BUCKETS = [
     ['received', 'Received'], ['rejectedBeforeDelivery', 'Rejected (validation or duplicate)'], ['notProcessed', 'Not processed'], ['heldForReview', 'Possible duplicate'],
     ['accepted', 'Accepted for write'], ['primaryWritten', 'Written'], ['primaryFailed', 'Write failed'], ['awaitingRetry', 'Retry scheduled'], ['unknown', 'Outcome unknown'],
-    ['inFlight', 'Awaiting commit'], ['replicaConfirmed', 'Replicated'], ['replicaPending', 'Replication pending'], ['replicaFailed', 'Replication failed'],
+    ['inFlight', 'Awaiting commit'],
   ];
   const bucketIds = (rc, key) => { const t = TOTALS.find((x) => x[0] === key); return (t ? t[2] : [key]).flatMap((k) => rc.ids[k] || []); };
   const bucketCount = (rc, key) => { const t = TOTALS.find((x) => x[0] === key); return (t ? t[2] : [key]).reduce((s, k) => s + (rc[k] || 0), 0); };
@@ -862,28 +854,26 @@
     const open = UI.reconOpen;
     const v = (k) => bucketCount(rc, k);
     const notes = [];
-    if (rc.unknown) notes.push(`${num(rc.unknown)} write outcome(s) unknown. Reconcile checks Master Registry 1, then resends safely.`);
+    if (rc.unknown) notes.push(`${num(rc.unknown)} write outcome(s) unknown. Reconcile checks the NSIPA Registry, then resends safely.`);
     if (rc.awaitingRetry || rc.inFlight) notes.push(`${num(rc.awaitingRetry + rc.inFlight)} retry scheduled or awaiting commit.`);
-    if (rc.replicaPending) notes.push(`${num(rc.replicaPending)} written but replication pending.`);
-    if (rc.replicaFailed) notes.push(`${num(rc.replicaFailed)} not replicated. Reconcile requests re-sync.`);
     if (rc.heldForReview) notes.push(`${num(rc.heldForReview)} possible duplicate(s) awaiting review.`);
     if (rc.primaryFailed) notes.push(`${num(rc.primaryFailed)} write failure(s).`);
     return html`<div class="stack">
-      <div class="kpis totals">${TOTALS.map(([k, l, , d]) => html`<button class="kpi" data-tone="${k === 'added' || k === 'copied' ? 'good' : (k === 'review' || k === 'processing') && v(k) ? 'warn' : ''}" data-act="recon-open" data-arg="${k}" aria-pressed="${open === k}" ${raw(v(k) ? '' : 'disabled')}><span class="k">${l}</span><span class="v">${num(v(k))}</span><span class="d">${d}</span></button>`)}</div>
-      <p class="small" style="margin:0"><b>Balance:</b> ${num(v('received'))} received = ${num(v('notSent'))} not sent + ${num(v('review'))} exceptions + ${num(v('processing'))} pending + ${num(v('added'))} written. Of ${num(v('added'))} written: ${num(rc.replicaConfirmed)} replicated, ${num(rc.replicaPending)} pending, ${num(rc.replicaFailed)} failed.</p>
+      <div class="kpis totals">${TOTALS.map(([k, l, , d]) => html`<button class="kpi" data-tone="${k === 'added' ? 'good' : (k === 'review' || k === 'processing') && v(k) ? 'warn' : ''}" data-act="recon-open" data-arg="${k}" aria-pressed="${open === k}" ${raw(v(k) ? '' : 'disabled')}><span class="k">${l}</span><span class="v">${num(v(k))}</span><span class="d">${d}</span></button>`)}</div>
+      <p class="small" style="margin:0"><b>Balance:</b> ${num(v('received'))} received = ${num(v('notSent'))} not sent + ${num(v('review'))} exceptions + ${num(v('processing'))} pending + ${num(v('added'))} written.</p>
       ${notes.length ? html`<div class="callout warn"><b>Open items</b><ul style="margin:6px 0 0;padding-left:18px">${notes.map((x) => html`<li>${x}</li>`)}</ul></div>` : html`<div class="callout ok">Balanced. All records accounted for.</div>`}
       ${open ? html`<div class="panel"><header><h3>${(TOTALS.find((t) => t[0] === open) || BUCKETS.find((b) => b[0] === open) || [, open])[1]}: ${num(bucketIds(rc, open).length)}</h3><button class="btn sm" data-act="recon-open" data-arg="">Close</button></header>${recordsTable(bucketIds(rc, open).map((id) => E.findRecord(id)), true, `${key}:bucket`, open)}</div>` : ''}
       ${moreDetails('Detailed breakdown', html`${table({ key: `${key}:buckets`, items: BUCKETS, cols: [['Bucket', ''], ['Records', 110, 'num'], ['', 160]],
         row: ([k, l]) => html`<tr class="${open === k ? 'sel' : ''}"><td>${l}</td><td class="num">${num(rc[k])}</td><td><button class="btn sm" data-act="recon-open" data-arg="${k}" ${raw(rc[k] ? '' : 'disabled title="Empty."')}>View records</button></td></tr>` })}
-        ${techDetails(html`<div class="stack small">${rc.checks.map((c) => html`<div class="spread"><span>${c.name}</span><span class="mono">${num(c.lhs)} ${c.ok ? '=' : '≠'} ${num(c.rhs)} ${c.ok ? 'ok' : 'mismatch'}</span></div>`)}</div>
-          <dl class="kv small" style="margin-top:10px"><dt>SR1 acknowledged (middleware ledger)</dt><dd>${num(rc.primaryWritten)}</dd><dt>Held by SR1 (query by idempotency key, mock)</dt><dd>${num(rc.destinationCount)}</dd><dt>Confirmed on SR2</dt><dd>${num(rc.replicaConfirmed)}</dd><dt>Duplicate writes prevented</dt><dd>${num(rc.duplicatesPrevented)}</dd></dl>`, 'Technical details: identity checks')}`)}
+        ${techDetails(html`<div class="stack small">${rc.checks.map((c) => html`<div class="spread"><span>${T.scrub(c.name)}</span><span class="mono">${num(c.lhs)} ${c.ok ? '=' : '≠'} ${num(c.rhs)} ${c.ok ? 'ok' : 'mismatch'}</span></div>`)}</div>
+          <dl class="kv small" style="margin-top:10px"><dt>Acknowledged by the NSIPA Registry (middleware ledger)</dt><dd>${num(rc.primaryWritten)}</dd><dt>Held by the NSIPA Registry (query by idempotency key, mock)</dt><dd>${num(rc.destinationCount)}</dd><dt>Duplicate writes prevented</dt><dd>${num(rc.duplicatesPrevented)}</dd></dl>`, 'Technical details: identity checks')}`)}
     </div>`;
   }
   function pageRecon() {
     const runs = UI.reconScope ? [E.getRun(UI.reconScope)] : E.filterRuns({ range: UI.filters.range });
     const rc = E.reconcileSummary(runs);
     const need = newest(S.runs.filter((r) => { const x = E.reconcileSummary([r]); return x.unknown || x.replicaFailed || x.destinationMismatch; }), (r) => r.createdAt);
-    const why = (x) => [x.unknown ? `${x.unknown} outcome unknown` : '', x.replicaFailed ? `${x.replicaFailed} not replicated` : '', x.destinationMismatch && !x.unknown ? 'count mismatch' : ''].filter(Boolean).join(' · ');
+    const why = (x) => [x.unknown ? `${x.unknown} outcome unknown` : '', x.destinationMismatch && !x.unknown ? 'count mismatch' : ''].filter(Boolean).join(' · ');
     return html`${head('Reconciliation')}
       <div class="filters"><label class="field">Scope<select data-change="bind" data-key="reconScope"><option value="">All transfers (${({ today: 'today', '24h': '24 h', '7d': '7 days', all: 'all time' })[UI.filters.range]})</option>${S.runs.slice().reverse().map((r) => html`<option value="${r.id}" ${raw(UI.reconScope === r.id ? 'selected' : '')}>${fmtTime(r.createdAt, false)} · ${r.sourceName} · ${T.runStatus(E.runStatus(r)).label}</option>`)}</select></label></div>
       ${need.length ? html`<section class="panel"><header><h3>Reconciliation required</h3></header><div class="body flush">${table({ key: 'recon-need', items: need, cols: [['Date', 150], ['Source', 240], ['Why', ''], ['', 220, 'num']],
@@ -898,16 +888,18 @@
   // Engine connection-check step names, shortened.
   const CHECK_STEPS = { 'Source enabled': 'Source enabled', 'Template registered': 'Template registered', 'Quarantine bucket writable (simulated)': 'Quarantine ready', 'Egress / SSRF policy': 'Address allowed', 'DNS + TLS 1.3 handshake (simulated)': 'Secure connection (TLS)', 'Fetch credential from vault (simulated)': 'Credentials (vault)', 'Authenticate with source': 'Authentication', 'Probe schema (1 record)': 'Schema check' };
   const checkList = (steps) => html`<ul class="checks">${steps.map(([n, ok, d]) => html`<li><span class="${ok ? 'ok-i' : 'no-i'}">${ok ? '✓' : '✕'}</span><span><b>${CHECK_STEPS[n] || n}</b>${ok ? '' : html` <span class="muted">${T.scrub(d)}</span>`}</span></li>`)}</ul>`;
+  // Only sources reached over an API have a connection to check.
+  const isApi = (s) => s.connection === 'API';
   function pageSources() {
     const list = S.sources.filter((s) => !s.removed);
     const removed = S.sources.filter((s) => s.removed);
     const sel = UI.sourceId && E.getSource(UI.sourceId);
     return html`${head('Sources', 'Credentials are stored as vault references; secrets are never shown.', html`<button class="btn primary" data-act="source-new" ${dis('source.edit')}>Add source</button>`)}
-      <section class="panel">${table({ key: 'sources', items: list, empty: 'No sources.', cols: [['Source', 280], ['Method', 170], ['Health', 120], ['Enabled', 110], ['Last success', 130], ['Last failure', 130], ['', 480]],
+      <section class="panel">${table({ key: 'sources', items: list, empty: 'No sources.', cols: [['Source', 280], ['Method', 150], ['Health', 120], ['Enabled', 110], ['Last success', 130], ['Last failure', 130], ['', 320]],
         row: (s) => html`<tr class="${UI.sourceId === s.id ? 'sel' : ''}"><td><button class="btn ghost cell-link" data-act="source" data-arg="${s.id}" title="${s.name} · ${s.type} · ${s.env}">${s.name}</button> <span class="small muted">· ${s.type} · ${s.env}</span></td><td>${modes(s)}</td><td>${pill('health', s.enabled ? s.health : 'DISABLED')}</td>
           <td><button class="btn sm" data-act="toggle-source" data-arg="${s.id}" ${dis('source.toggle')} aria-pressed="${s.enabled}">${s.enabled ? 'Disable' : 'Enable'}</button></td>
           <td class="small">${rel(s.lastSuccessAt)}</td><td class="small">${rel(s.lastFailureAt)}</td>
-          <td><div class="btns nowrap"><button class="btn sm" data-act="source-test" data-arg="${s.id}" ${dis('source.test')}>Check connection</button><button class="btn sm" data-act="source-edit" data-arg="${s.id}" ${dis('source.edit')}>Edit</button><button class="btn sm" data-act="ingest-from" data-arg="${s.id}" ${dis('run.start')}>New transfer</button><button class="btn sm danger" data-act="source-remove" data-arg="${s.id}" ${dis('source.edit')}>Remove</button></div></td></tr>` })}
+          <td><div class="btns nowrap">${isApi(s) ? html`<button class="btn sm" data-act="source-test" data-arg="${s.id}" ${dis('source.test')}>Check connection</button>` : ''}<button class="btn sm" data-act="source-edit" data-arg="${s.id}" ${dis('source.edit')}>Edit</button><button class="btn sm danger" data-act="source-remove" data-arg="${s.id}" ${dis('source.edit')}>Remove</button></div></td></tr>` })}
       ${removed.length ? html`<div class="body small muted">Removed (history kept): ${removed.map((s) => s.name).join(', ')}</div>` : ''}</section>
       ${sel ? sourceDetail(sel) : html`<div class="callout">Select a source to view details.</div>`}`;
   }
@@ -922,12 +914,21 @@
       <section class="panel c5"><header><h3>${s.name}</h3>${s.connection === 'API' ? html`<span class="mock-tag">mock</span>` : ''}</header><div class="body"><dl class="kv">${basic.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
         ${moreDetails('Configuration', html`<dl class="kv small">${tech.map(([k, val]) => html`<dt>${k}</dt><dd class="${/URL|Credential|ID/.test(k) ? 'mono' : ''}">${val}</dd>`)}</dl>`)}</div></section>
       <div class="c7 stack">
-        <section class="panel"><header><h3>Connection</h3><button class="btn sm" data-act="source-test" data-arg="${s.id}" ${dis('source.test')}>Check connection</button></header><div class="body">
-          ${t ? html`<p style="margin:0 0 8px">${t.ok ? html`<span class="pill good">Connected</span>` : html`<span class="pill crit">Failed</span>`} <span class="small muted">${fmtTime(t.at)} · simulated</span></p>${moreDetails('Checks', checkList(t.steps), !t.ok)}` : html`<p class="small muted" style="margin:0">Not checked in this session.</p>`}</div></section>
+        ${isApi(s) ? html`<section class="panel"><header><h3>Connection</h3><button class="btn sm" data-act="source-test" data-arg="${s.id}" ${dis('source.test')}>Check connection</button></header><div class="body">
+          ${t ? html`<p style="margin:0 0 8px">${t.ok ? html`<span class="pill good">Connected</span>` : html`<span class="pill crit">Failed</span>`} <span class="small muted">${fmtTime(t.at)} · simulated</span></p>${moreDetails('Checks', checkList(t.steps), !t.ok)}` : html`<p class="small muted" style="margin:0">Not checked in this session.</p>`}</div></section>` : ''}
         <section class="panel"><header><h3>Field mapping</h3><button class="btn sm" data-act="map-open" data-arg="${s.id}">Open</button></header><div class="body small">Version ${mp.version} · required ${v.requiredMapped}/${v.requiredTotal} ${v.ok ? html`<span class="pill good">Valid</span>` : html`<span class="pill crit">Mapping error</span>`}</div></section>
         <section class="panel"><header><h3>Transfers</h3><span class="sub">${runs.length}</span></header><div class="body flush">${table({ key: `source-runs:${s.id}`, items: runs, empty: 'No transfers.', cols: [['Date', 140], ['Method', 120], ['Written', 140, 'num'], ['Status', ''], ['', 90]],
           row: (r) => html`<tr><td class="small">${fmtTime(r.createdAt, false)}</td><td>${T.modeLabel(r.mode)}</td><td class="num small">${num(E.reconcileSummary([r]).primaryWritten)}/${num(r.records.length)} written</td><td>${pill('run', E.runStatus(r))}</td><td><button class="btn sm" data-act="run" data-arg="${r.id}">View</button></td></tr>` })}</div></section>
       </div></div>`;
+  }
+  // A unique source ID from the name (SRC-KADUNA-STATE-REGISTRY), plus layout and format for the method.
+  function newSourceDefaults(f) {
+    const base = `SRC-${String(f.name || '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'SOURCE'}`;
+    let id = base;
+    for (let n = 2; E.getSource(id); n++) id = `${base}-${n}`;
+    const file = f.connection === 'IMPORT';
+    return { id, layout: file ? 'CCT_TEMPLATE_V1' : 'JOSH_V2', importFormat: file ? 'Template v1 (.csv / .xlsx)' : '', endpoint: file ? '' : '/v1/records', method: file ? '' : 'GET',
+      pagination: file ? '—' : 'offset/limit 100', incremental: file ? '—' : 'updated_since watermark', schemaVersion: 'v1' };
   }
   function sourceForm() {
     const f = UI.sourceForm;
@@ -942,12 +943,7 @@
       ${inp('frequency', 'Schedule', 'Manual / Daily 02:00')}
       <label class="field"><span>Enabled</span><select data-bind="sourceForm.enabled" data-type="bool"><option value="true" ${raw(f.enabled ? 'selected' : '')}>Yes</option><option value="false" ${raw(!f.enabled ? 'selected' : '')}>No</option></select></label>
       ${f.connection === 'API' ? html`${inp('baseUrl', 'Base URL (https)', 'https://example.mock.invalid', true)}${inp('authRef', 'Credential (vault reference)', 'vault://databridge/sources/…', true)}` : ''}
-      <details class="wide more" ${raw(f._new ? 'open' : '')}><summary>Advanced</summary><div class="form more-body">
-        ${inp('id', 'Source ID', 'SRC-STATE-EXAMPLE')}
-        ${sel('layout', 'Source layout', Object.entries(LAYOUTS))}
-        ${f.connection === 'API' ? html`${inp('endpoint', 'Endpoint', '/v1/records')}${sel('method', 'HTTP method', [['GET', 'GET'], ['POST', 'POST']])}${inp('pagination', 'Pagination', 'cursor, page size 100')}${inp('incremental', 'Incremental fetch', 'updated_since watermark')}` : html`${inp('importFormat', 'Import format', 'Template v1 (.csv / .xlsx)')}`}
-        ${inp('schemaVersion', 'Schema version')}</div></details>
-      <div class="wide small muted">https only; allow-listed hosts (.gov.ng, .mock.invalid). Credentials: vault references only.</div>
+      ${f.connection === 'API' ? html`<div class="wide small muted">https only; allow-listed hosts (.gov.ng, .mock.invalid). Credentials: vault references only.</div>` : ''}
       ${f._error ? html`<div class="wide callout crit">${T.scrub(f._error)}</div>` : ''}</div>`;
   }
 
@@ -955,28 +951,28 @@
   // Destinations
   // ---------------------------------------------------------------------------
   function pageDestinations() {
-    const [p, r] = S.destinations;
+    const [p] = S.destinations;
     const m = E.metrics({ range: 'all' });
     const stateList = [
       ['Received', 'Read from source or file'], ['Valid', 'Passed validation'], ['Accepted', 'Valid, unique, sent for write'],
-      ['Written', 'Confirmed by Master Registry 1'], ['Replicated', 'Confirmed in Master Registry 2'],
+      ['Written', 'Confirmed by the NSIPA Registry'],
       ['Write failed', 'Rejected, or retries exhausted'], ['Retry scheduled', 'Temporary failure; automatic retry'], ['Outcome unknown', 'Unconfirmed write; reconcile before resending'],
     ];
-    const card = (d) => html`<section class="panel c6"><header><h3>${d.role === 'PRIMARY' ? 'Master Registry 1' : 'Master Registry 2'} <span class="muted small">${d.role === 'PRIMARY' ? 'Primary · write' : 'Replica · read-only'}</span></h3>${pill('health', d.enabled ? d.health : 'DISABLED')}</header><div class="body"><dl class="kv">
+    const card = (d) => html`<section class="panel c6"><header><h3>NSIPA Registry</h3>${pill('health', d.enabled ? d.health : 'DISABLED')}</header><div class="body"><dl class="kv">
       ${d.role === 'PRIMARY' ? html`<dt>Last write</dt><dd>${rel(d.lastDeliveryAt)}</dd><dt>Written</dt><dd>${num(m.deliveredSR1)}</dd><dt>Duplicates prevented</dt><dd>${num(m.duplicatesPrevented)}</dd><dt>Max attempts</dt><dd>${d.retry.maxAttempts}</dd>`
         : html`<dt>Last sync</dt><dd>${rel(d.lastSyncAt)}</dd><dt>Replication</dt><dd>${num(m.confirmedSR2)} replicated · ${num(m.replicaPending)} pending · ${num(m.replicaFailed)} failed</dd><dt>Lag</dt><dd>${dur(m.replicationLagMs)} (threshold ${d.lagThresholdMs / 1000} s)</dd>`}
       </dl><div class="btns" style="margin-top:12px"><button class="btn sm" data-act="dest-health" data-arg="${d.id}">Check connection</button>
       ${d.role === 'PRIMARY' ? html`<button class="btn sm" data-act="dest-toggle" data-arg="${d.id}" ${dis('destination.edit')}>${d.enabled ? 'Disable' : 'Enable'}</button><label class="small row">Max attempts <select data-change="maxattempts" ${dis('destination.edit')}>${[3, 5, 8].map((n) => html`<option ${raw(d.retry.maxAttempts === n ? 'selected' : '')}>${n}</option>`)}</select></label>` : ''}</div>
       ${techDetails(html`<dl class="kv small"><dt>ID</dt><dd class="mono">${d.id}</dd><dt>Name</dt><dd>${T.brand(d.name)}</dd><dt>Endpoint</dt><dd class="mono">${d.endpoint}</dd><dt>Credentials</dt><dd class="mono">${d.authRef}</dd><dt>Delivery policy</dt><dd>${d.deliveryPolicy}</dd><dt>Retry policy</dt><dd>${d.retry.maxAttempts} attempts · base ${d.retry.baseMs / 1000} s ×${d.retry.factor} · cap ${d.retry.capMs / 1000} s · ${d.retry.jitter} jitter</dd></dl>`)}</div></section>`;
-    return html`${head('Destinations', 'Writes go to Master Registry 1 only; Master Registry 2 is verified as its replica.')}
-      <div class="grid">${card(p)}${card(r)}</div>
+    return html`${head('Destinations', 'Records are written to the NSIPA Registry.')}
+      <div class="grid">${card(p)}</div>
       <div class="grid">
         <section class="panel c6"><header><h3>Record states</h3></header><div class="body flush">${table({ key: 'dest-states', items: stateList, cols: [['State', 170], ['Meaning', '']], row: ([a, b]) => html`<tr><td><b>${a}</b></td><td class="small muted">${b}</td></tr>` })}</div></section>
         <section class="panel c6"><header><h3>Delivery guarantees</h3></header><div class="body stack note">
           <p style="margin:0"><b>No duplicate writes.</b> Resends are recognised and not saved twice.</p>
           <p style="margin:0"><b>Written means confirmed.</b> Acceptance alone is not counted.</p>
           <p style="margin:0"><b>No silent overwrite.</b> Cross-source matches go to review.</p>
-          ${techDetails(html`<p style="margin:0"><b>At-least-once delivery, made effectively-once by idempotency.</b> Idempotency key = sha256(source key | source version | payload). Exactly-once is not claimed: it holds only if SR1 enforces the key. The platform endpoint <span class="mono">/partner/ingest_data</span> is asynchronous and returns an <span class="mono">ingest_id</span>; persisting and checking the key there is a required platform change. Unknown outcomes are resolved by querying SR1 by key before resending; SR2 is probed by internal record ID.</p>`, 'Technical details: delivery semantics')}</div></section>
+          ${techDetails(html`<p style="margin:0"><b>At-least-once delivery, made effectively-once by idempotency.</b> Idempotency key = sha256(source key | source version | payload). Exactly-once is not claimed: it holds only if the NSIPA Registry enforces the key. The platform endpoint <span class="mono">/partner/ingest_data</span> is asynchronous and returns an <span class="mono">ingest_id</span>; persisting and checking the key there is a required platform change. Unknown outcomes are resolved by querying the NSIPA Registry by key before resending.</p>`, 'Technical details: delivery semantics')}</div></section>
       </div>`;
   }
 
@@ -987,7 +983,6 @@
     ['authFail', 'Authentication failure', 'bool', 'API'], ['rateLimit', 'Rate limit on page 2', 'bool', 'API'], ['pageTimeout', 'Timeout on page 3', 'bool', 'API'], ['schemaDrift', 'Source schema change', 'bool', 'API'],
     ['missing', 'Missing required fields', 'num'], ['invalid', 'Invalid formats', 'num'], ['crossSource', 'Cross-source duplicates', 'num', 'API'],
     ['transient', 'Temporary write failures', 'num'], ['permanent', 'Write rejections', 'num'], ['unknown', 'Unknown write outcomes', 'num'], ['exhaust', 'Writes failing every attempt', 'num'],
-    ['replicaDelayMs', 'Replication delay', 'delay'], ['replicaFail', 'Replication failures', 'num'],
   ];
   const UPLOAD_CHECKS = [[/^File name/, 'File name'], [/^Extension/, 'File type (.csv, .xlsx)'], [/^Size/, 'Size ≤ 5 MB'], [/^File signature/, 'Content matches type'], [/^MIME/, 'MIME type'], [/^Macros/, 'Formulas not executed']];
   const uploadCheckName = (n) => (UPLOAD_CHECKS.find(([re]) => re.test(n)) || [, n])[1];
@@ -1140,9 +1135,11 @@
       ${moreDetails('Sample Files', html`<div class="btns"><button class="btn sm" data-act="wiz-sample" data-arg="good">Valid</button><button class="btn sm" data-act="wiz-sample" data-arg="duplicates">Duplicates</button><button class="btn sm" data-act="wiz-sample" data-arg="drift">Schema mismatch</button><button class="btn sm" data-act="wiz-sample" data-arg="malicious">Malicious</button></div>`)}`;
   }
   const maskPreview = (h, v) => (FIELD[h] && /^High/.test(FIELD[h].sensitivity) && v ? maskVal(h, v) : v);
+  // Scenarios about the second registry no longer apply.
+  const SCENARIO_LIST = DB.SCENARIOS.filter((sc) => !(sc.sim && (sc.sim.replicaFail || sc.sim.replicaDelayMs)));
   function scenarioLab() {
-    return html`<details class="panel demo"><summary style="padding:14px 18px;cursor:pointer"><b>Demo scenarios (${DB.SCENARIOS.length})</b> <span class="small muted">Run through the same engine.</span></summary><div class="body"><div class="scen">
-      ${DB.SCENARIOS.map((sc) => { const [t, x] = T.SCENARIO_TEXT[sc.id] || [sc.title, sc.expect]; return html`<div class="scen-card"><h4><span>${sc.id}</span>${t}</h4><p>${x}</p><div class="spread"><span class="small muted">${srcName(sc.source)} · ${T.modeLabel(sc.mode)}</span><button class="btn sm primary" data-act="scenario" data-arg="${sc.id}" ${dis('run.start')}>Run</button></div></div>`; })}
+    return html`<details class="panel demo"><summary style="padding:14px 18px;cursor:pointer"><b>Demo scenarios (${SCENARIO_LIST.length})</b> <span class="small muted">Run through the same engine.</span></summary><div class="body"><div class="scen">
+      ${SCENARIO_LIST.map((sc) => { const [t, x] = T.SCENARIO_TEXT[sc.id] || [sc.title, sc.expect]; return html`<div class="scen-card"><h4><span>${sc.id}</span>${t}</h4><p>${x}</p><div class="spread"><span class="small muted">${srcName(sc.source)} · ${T.modeLabel(sc.mode)}</span><button class="btn sm primary" data-act="scenario" data-arg="${sc.id}" ${dis('run.start')}>Run</button></div></div>`; })}
     </div></div></details>`;
   }
 
@@ -1256,24 +1253,22 @@
     const all = S.runs.flatMap((r) => r.records);
     if (!UI.recordId) {
       const at = (r) => (r.times && r.times.extractedAt) || E.getRun(r.runId).createdAt;
-      const hits = newest(q ? all.filter((r) => [r.id, r.sourceRecordId, r.primary.masterId, r.idemKey].some((x) => x && x.toLowerCase().includes(q))) : all.filter((r) => r.primary.status !== 'WRITTEN' || r.replica.status !== 'CONFIRMED'), at);
-      return html`${head('Data lineage', 'Trace a record from source to both master registries.')}
-        <div class="filters"><label class="field" style="flex:1">Search<input type="search" id="line-q" data-bind="lineQ" data-live value="${UI.lineQ}" placeholder="Source reference or master record ID"></label></div>
-        <section class="panel"><header><h3>${q ? `${hits.length} result(s)` : 'Incomplete records'}</h3></header>${table({ key: 'lineage', sig: q, items: hits, empty: 'No records found.', cols: [['Record', 190], ['Source', 230], ['Person (masked)', ''], ['Registry 1', 170], ['Registry 2', 150], ['', 110]],
-          row: (r) => html`<tr><td class="small">${r.sourceRecordId}</td><td class="small muted">${srcName(r.sourceId)}</td><td>${person(r)}</td><td>${pill('primary', r.primary.status)}</td><td>${pill('replica', r.replica.status)}</td><td><button class="btn sm" data-act="lineage" data-arg="${r.id}">Lineage</button></td></tr>` })}</section>`;
+      const hits = newest(q ? all.filter((r) => [r.id, r.sourceRecordId, r.primary.masterId, r.idemKey].some((x) => x && x.toLowerCase().includes(q))) : all.filter((r) => r.primary.status !== 'WRITTEN'), at);
+      return html`${head('Data lineage', 'Trace a record from source to the NSIPA Registry.')}
+        <div class="filters"><label class="field" style="flex:1">Search<input type="search" id="line-q" data-bind="lineQ" data-live value="${UI.lineQ}" placeholder="Source reference or registry record ID"></label></div>
+        <section class="panel"><header><h3>${q ? `${hits.length} result(s)` : 'Incomplete records'}</h3></header>${table({ key: 'lineage', sig: q, items: hits, empty: 'No records found.', cols: [['Record', 190], ['Source', 230], ['Person (masked)', ''], ['NSIPA Registry', 170], ['', 110]],
+          row: (r) => html`<tr><td class="small">${r.sourceRecordId}</td><td class="small muted">${srcName(r.sourceId)}</td><td>${person(r)}</td><td>${pill('primary', r.primary.status)}</td><td><button class="btn sm" data-act="lineage" data-arg="${r.id}">Lineage</button></td></tr>` })}</section>`;
     }
     const L = E.lineage(UI.recordId);
     const r = L.record;
     const pr = L.provenance;
     const [pl] = T.recordStatus('primary', r.primary.status);
-    const [rl] = T.recordStatus('replica', r.replica.status);
     const nodes = [
       ['Source', L.source.name, `${r.sourceRecordId}\nUpdated ${fmtTime(r.sourceUpdatedAt)}`, 'good'],
       [L.run.mode === 'API' ? 'Received (API)' : 'Received (file)', fmtTime(r.times.extractedAt), L.run.mode === 'API' ? '' : (L.run.file || {}).safeName || '', 'good'],
       ['Validation', T.recordStatus('validation', r.validation.status)[0], r.validation.issues.length ? `${r.validation.issues.length} issue(s)` : '', r.validation.status === 'VALID' ? 'good' : r.validation.status === 'INVALID' ? 'crit' : 'none'],
       ['Duplicate detection', T.recordStatus('dedup', r.dedup.status)[0], r.transform.status === 'OK' ? '' : 'Conversion failed', r.transform.status === 'OK' ? (['DUPLICATE_IN_BATCH', 'MATCH_REVIEW', 'REJECTED_REVIEW'].includes(r.dedup.status) ? 'warn' : 'good') : 'crit'],
-      ['Master Registry 1', pl, `${r.primary.masterId ? `${r.primary.masterId}\n` : ''}${r.primary.writtenAt ? fmtTime(r.primary.writtenAt) : `${r.primary.attempts.length} attempt(s)`}`, r.primary.status === 'WRITTEN' ? 'good' : r.primary.status === 'NOT_ATTEMPTED' ? 'none' : ['UNKNOWN', 'DEAD_LETTER'].includes(r.primary.status) ? 'crit' : 'warn'],
-      ['Master Registry 2', rl, r.replica.confirmedAt ? `${fmtTime(r.replica.confirmedAt)}\nLag ${dur(r.replica.lagMs)}` : r.replica.status === 'PENDING' ? `Waiting ${dur(S.now - r.primary.writtenAt)}` : '', r.replica.status === 'CONFIRMED' ? 'good' : r.replica.status === 'FAILED' ? 'crit' : r.replica.status === 'PENDING' ? 'warn' : 'none'],
+      ['NSIPA Registry', pl, `${r.primary.masterId ? `${r.primary.masterId}\n` : ''}${r.primary.writtenAt ? fmtTime(r.primary.writtenAt) : `${r.primary.attempts.length} attempt(s)`}`, r.primary.status === 'WRITTEN' ? 'good' : r.primary.status === 'NOT_ATTEMPTED' ? 'none' : ['UNKNOWN', 'DEAD_LETTER'].includes(r.primary.status) ? 'crit' : 'warn'],
     ];
     const c = r.canonical || {};
     const result = (o) => ({ ACCEPTED: 'Written', RECONCILED_FOUND: 'Found on reconcile', TIMEOUT: 'Timeout', REJECTED: 'Rejected' }[o] || 'Temporary failure');
@@ -1284,7 +1279,7 @@
       <div class="grid">
         <section class="panel c6"><header><h3>Provenance</h3></header><div class="body"><dl class="kv">
           <dt>Source</dt><dd>${L.source.name}</dd><dt>Source reference</dt><dd>${r.sourceRecordId}</dd><dt>Transfer</dt><dd>${T.modeLabel(L.run.mode)} · ${fmtTime(L.run.createdAt, false)}</dd>
-          <dt>Mapping</dt><dd>Version ${L.run.mappingVersion}</dd><dt>Master record</dt><dd>${r.primary.masterId || '—'}</dd></dl>
+          <dt>Mapping</dt><dd>Version ${L.run.mappingVersion}</dd><dt>Registry record</dt><dd>${r.primary.masterId || '—'}</dd></dl>
           ${techDetails(html`<dl class="kv small">${Object.entries(pr).map(([k, v]) => html`<dt class="mono">${k}</dt><dd class="${/id|key|trace/i.test(k) ? 'mono' : ''}">${typeof v === 'number' ? fmtTime(v) : v === null || v === undefined ? '—' : v}</dd>`)}</dl>`)}</div></section>
         <div class="c6 stack">
           ${r.validation.issues.length ? html`<section class="panel"><header><h3>Validation</h3></header><div class="body small stack">${r.validation.issues.map((i) => html`<div><span class="pill ${i.severity === 'ERROR' ? 'crit' : 'warn'}">${i.severity === 'ERROR' ? 'Error' : 'Warning'}</span> ${issueText(i)}</div>`)}
@@ -1329,7 +1324,7 @@
   ];
   function pageSecurity() {
     if (!E.can('security.view')) return html`${head('Access control')}<div class="panel">${empty('Access denied. Platform Admin only.')}</div>`;
-    const refs = S.sources.filter((s) => s.authRef && s.authRef !== '—').map((s) => [s.name, s.authRef]).concat(S.destinations.map((d) => [d.role === 'PRIMARY' ? 'Master Registry 1' : 'Master Registry 2', d.authRef]));
+    const refs = S.sources.filter((s) => s.authRef && s.authRef !== '—').map((s) => [s.name, s.authRef]).concat(S.destinations.map((d) => ['NSIPA Registry', d.authRef]));
     const roles = Object.entries(DB.ROLES);
     return html`${head('Access control', 'Simulated controls are demonstrated by the prototype, not production systems.')}
       <section class="panel"><header><h3>Permissions</h3><span class="sub">Current role highlighted</span></header>${table({ key: 'permissions', items: DB.PERMISSIONS, cols: [['Permission', '']].concat(roles.map(([k]) => [roleName(k), 150, k === S.role ? 'sel' : ''])),
@@ -1354,8 +1349,8 @@
   }
   function pageArchitecture() {
     return html`${head('Architecture', html`Eight diagrams from editable Mermaid source in <span class="mono">docs/architecture/</span>. Proposed components only.`)}
-      <div class="callout"><b>Summary:</b> sources → validation → Master Registry 1 → replication check (Master Registry 2) → reconciliation. Unconfirmed outcomes become exceptions.</div>
-      <div class="callout small">Grounded in the registry codebase: the platform already exposes <span class="mono">POST /partner/ingest_data</span> (partner API) feeding <span class="mono">incoming_raw_data</span> → Celery classification → transformation → ingest workers (max 5 attempts), and file imports through <span class="mono">import_file_process_queue</span> with a unique <span class="mono">(document_id, record_number)</span> log. DataBridge sits in front of that as the multi-source orchestrator and adds provenance, idempotency, replica verification and reconciliation.</div>`;
+      <div class="callout"><b>Summary:</b> sources → validation → NSIPA Registry → reconciliation. Unconfirmed outcomes become exceptions.</div>
+      <div class="callout small">Grounded in the registry codebase: the platform already exposes <span class="mono">POST /partner/ingest_data</span> (partner API) feeding <span class="mono">incoming_raw_data</span> → Celery classification → transformation → ingest workers (max 5 attempts), and file imports through <span class="mono">import_file_process_queue</span> with a unique <span class="mono">(document_id, record_number)</span> log. DataBridge sits in front of that as the multi-source orchestrator and adds provenance, idempotency and reconciliation.</div>`;
   }
 
   // ---------------------------------------------------------------------------
@@ -1385,8 +1380,8 @@
       const r = E.findRecord(m.id);
       const other = S.master.records.get(r.dedup.matchedWith);
       title = 'Possible duplicate';
-      body = html`<p style="margin:0">Same NIN as an existing master record from another source. Never merged automatically.</p><div class="grid"><div class="c6 panel"><header><h3>Incoming · ${srcName(r.sourceId)}</h3></header><div class="body"><dl class="kv small"><dt>Source reference</dt><dd>${r.sourceRecordId}</dd><dt>Name</dt><dd>${person(r)}</dd><dt>Date of birth</dt><dd>${maskVal('birth_date', r.canonical.birth_date)}</dd><dt>NIN</dt><dd>${maskVal('nin', r.canonical.nin)}</dd><dt>Household</dt><dd>${r.canonical.nsr_household_serial}</dd></dl></div></div>
-        <div class="c6 panel"><header><h3>Existing master record</h3></header><div class="body"><dl class="kv small"><dt>Master ID</dt><dd>${other ? other.masterId : r.dedup.matchedWith}</dd><dt>From</dt><dd>${other ? srcName(other.sourceId) : '—'}</dd><dt>Name</dt><dd>${other ? maskVal('given_name', other.given) + ' …' : '—'}</dd><dt>NIN</dt><dd>${other ? maskVal('nin', other.nin) : '—'}</dd><dt>Version</dt><dd>${other ? other.version : '—'}</dd></dl></div></div></div>`;
+      body = html`<p style="margin:0">Same NIN as an existing registry record from another source. Never merged automatically.</p><div class="grid"><div class="c6 panel"><header><h3>Incoming · ${srcName(r.sourceId)}</h3></header><div class="body"><dl class="kv small"><dt>Source reference</dt><dd>${r.sourceRecordId}</dd><dt>Name</dt><dd>${person(r)}</dd><dt>Date of birth</dt><dd>${maskVal('birth_date', r.canonical.birth_date)}</dd><dt>NIN</dt><dd>${maskVal('nin', r.canonical.nin)}</dd><dt>Household</dt><dd>${r.canonical.nsr_household_serial}</dd></dl></div></div>
+        <div class="c6 panel"><header><h3>Existing registry record</h3></header><div class="body"><dl class="kv small"><dt>Registry ID</dt><dd>${other ? other.masterId : r.dedup.matchedWith}</dd><dt>From</dt><dd>${other ? srcName(other.sourceId) : '—'}</dd><dt>Name</dt><dd>${other ? maskVal('given_name', other.given) + ' …' : '—'}</dd><dt>NIN</dt><dd>${other ? maskVal('nin', other.nin) : '—'}</dd><dt>Version</dt><dd>${other ? other.version : '—'}</dd></dl></div></div></div>`;
       foot = html`<button class="btn" data-act="modal-close">Later</button><button class="btn" data-act="review-decide" data-arg="REJECT" ${dis('error.resolve')}>Reject as duplicate</button><button class="btn primary" data-act="review-decide" data-arg="APPROVE_NEW" ${dis('error.resolve')}>Approve as new</button>`;
     } else if (m.type === 'raw') {
       title = 'View payload';
@@ -1499,7 +1494,7 @@
     if (t.retried - t.delivered - t.skipped > 0) bits.push('rest retry automatically');
     return `Retry: ${bits.join(' · ')}.`;
   }
-  const checkSummary = (r) => `Reconciled: ${num(r.confirmed)} confirmed · ${num(r.requeued)} resent${r.replicaResync ? ` · ${num(r.replicaResync)} re-sync requested` : ''}. Advance the clock to complete.`;
+  const checkSummary = (r) => `Reconciled: ${num(r.confirmed)} confirmed · ${num(r.requeued)} resent.`;
 
   const ACTIONS = {
     nav: (p) => { if (p === 'ingest' && UI.page !== 'ingest') UI.wiz = UI.wiz.step > 1 && !UI.wiz.runId ? UI.wiz : newWizard(); go(p, p === 'lineage' ? { recordId: null } : null); },
@@ -1534,7 +1529,7 @@
     'attention-all': () => go('runs', { tview: 'attention', errOpen: null }),
     'attention-source': () => go('runs', { tview: 'attention', errOpen: null }),
     'attention-open': (key) => go('runs', { tview: 'attention', errOpen: key }),
-    clock: (ms) => { E.advanceClock(Number(ms)); toast(`Clock +${dur(Number(ms))}. Retries and replication checks ran.`); },
+    clock: (ms) => { E.advanceClock(Number(ms)); toast(`Clock +${dur(Number(ms))}. Retries ran.`); },
     auto: () => {
       UI.auto = !UI.auto;
       clearInterval(ACTIONS.auto.t);
@@ -1577,7 +1572,7 @@
     raw: (id) => { UI.payloadView = null; UI.modal = { type: 'raw', id, just: '' }; },
     'raw-confirm': (id) => { UI.payloadView = E.viewRawPayload(id, UI.modal.just || ''); },
     source: (id) => go('sources', { sourceId: id, testResult: null }),
-    'source-new': () => { UI.sourceForm = { _new: true, id: 'SRC-', name: '', type: 'State Registry', org: '', description: '', env: 'Development', connection: 'API', layout: 'JOSH_V2', baseUrl: 'https://', endpoint: '/v1/records', method: 'GET', authRef: 'vault://databridge/sources/', pagination: 'offset/limit 100', incremental: 'updated_since watermark', importFormat: '', schemaVersion: 'v1', frequency: 'Manual', enabled: true }; UI.modal = { type: 'source-form' }; },
+    'source-new': () => { UI.sourceForm = { _new: true, name: '', type: 'State Registry', org: '', description: '', env: 'Development', connection: 'API', layout: 'JOSH_V2', baseUrl: 'https://', endpoint: '/v1/records', method: 'GET', authRef: 'vault://databridge/sources/', pagination: 'offset/limit 100', incremental: 'updated_since watermark', importFormat: '', schemaVersion: 'v1', frequency: 'Manual', enabled: true }; UI.modal = { type: 'source-form' }; },
     'source-edit': (id) => { UI.sourceForm = { ...E.getSource(id), _new: false }; UI.modal = { type: 'source-form' }; },
     'source-save': () => {
       const f = { ...UI.sourceForm };
@@ -1585,6 +1580,8 @@
       delete f._new; delete f._error;
       f.modes = f.connection === 'API' ? (isNew ? ['API'] : E.getSource(f.id).modes) : ['IMPORT'];
       if (f.connection === 'IMPORT') { f.baseUrl = ''; f.authRef = '—'; }
+      // The form asks only for what people know; the technical settings follow from it.
+      if (isNew) Object.assign(f, newSourceDefaults(f));
       try {
         if (isNew) E.addSource(f);
         else { const { id, createdAt, createdBy, updatedAt, updatedBy, removed, lastSuccessAt, lastFailureAt, health, watermark, ...patch } = f; E.updateSource(id, patch); }
@@ -1596,8 +1593,8 @@
     'toggle-source': (id) => { const s = E.getSource(id); E.setSourceEnabled(id, !s.enabled); toast(`${s.name} ${s.enabled ? 'enabled' : 'disabled'}.`); },
     'source-test': (id) => { UI.sourceId = id; UI.testResult = { sourceId: id, ...E.testConnection(id) }; if (UI.page !== 'sources') go('sources'); },
     'ingest-from': (id) => { pickSource(id); go('ingest'); },
-    'dest-health': (id) => { const d = S.destinations.find((x) => x.id === id); const name = d.role === 'PRIMARY' ? 'Master Registry 1' : 'Master Registry 2'; UI.modal = { type: 'health', id, name, steps: [['Reachable', d.enabled, d.enabled ? '' : 'Disabled'], ['mTLS certificate', true, ''], [d.role === 'PRIMARY' ? 'Test write (not committed)' : 'Read probe', d.enabled, '']] }; },
-    'dest-toggle': () => { E.updateDestination('MASTER_SR1', { enabled: !S.destinations[0].enabled }); toast(S.destinations[0].enabled ? 'Master Registry 1 enabled.' : 'Master Registry 1 disabled. New transfers will fail pre-flight.', !S.destinations[0].enabled); },
+    'dest-health': (id) => { const d = S.destinations.find((x) => x.id === id); const name = 'NSIPA Registry'; UI.modal = { type: 'health', id, name, steps: [['Reachable', d.enabled, d.enabled ? '' : 'Disabled'], ['mTLS certificate', true, ''], [d.role === 'PRIMARY' ? 'Test write (not committed)' : 'Read probe', d.enabled, '']] }; },
+    'dest-toggle': () => { E.updateDestination('MASTER_SR1', { enabled: !S.destinations[0].enabled }); toast(S.destinations[0].enabled ? 'NSIPA Registry enabled.' : 'NSIPA Registry disabled. New transfers will fail pre-flight.', !S.destinations[0].enabled); },
     'map-open': (id) => go('mapping', { mapSource: id, mapDraft: null, mapTest: null, mapTab: 'mapping' }),
     maptab: (t) => { UI.mapTab = t; },
     // A new row is added at the end, so the list moves to its last page to show it.
@@ -1632,6 +1629,8 @@
       animate(res, autoSend);
     },
     scenario: (id) => startScenario(id),
+    login: () => signIn(),
+    logout: () => signOut(),
     'modal-close': () => { UI.modal = null; UI.payloadView = null; },
     scrim: (_, el, ev) => { if (ev.target === el) { UI.modal = null; UI.payloadView = null; } },
     'copy-file': () => { const t = UI.modal.text; navigator.clipboard.writeText(t).then(() => toast('Copied.'), () => { const sel = window.getSelection(); const r = document.createRange(); r.selectNodeContents(document.getElementById('file-text')); sel.removeAllRanges(); sel.addRange(r); toast('Copy blocked. Text selected: press Ctrl+C.'); }); },
@@ -1679,6 +1678,16 @@
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled) return;
+    // Show or hide the password in place: re-rendering would empty the field.
+    if (el.dataset.act === 'pw-toggle') {
+      const f = document.getElementById('login-password');
+      const show = f.type === 'password';
+      f.type = show ? 'text' : 'password';
+      el.textContent = show ? 'Hide' : 'Show';
+      el.setAttribute('aria-pressed', String(show));
+      f.focus();
+      return;
+    }
     const fn = ACTIONS[el.dataset.act];
     if (!fn) return;
     if (el.dataset.act !== 'scrim') e.preventDefault();
@@ -1707,7 +1716,67 @@
   // Render
   // ---------------------------------------------------------------------------
   const PAGE_FN = { home: pageHome, settings: pageSettings, runs: pageRuns, run: pageRun, errors: pageErrors, recon: pageRecon, sources: pageSources, destinations: pageDestinations, ingest: pageIngest, mapping: pageMapping, quality: pageQuality, lineage: pageLineage, audit: pageAudit, security: pageSecurity, architecture: pageArchitecture };
+  // ---------------------------------------------------------------------------
+  // Sign in
+  // ---------------------------------------------------------------------------
+  function loginPage() {
+    const l = UI.login;
+    return html`<div class="login">
+      <section class="login-welcome"><div class="login-welcome-in">
+        <span class="login-mark">DataBridge</span>
+        <h1>Welcome to DataBridge</h1>
+        <p>Bring records in from every source, check them, and send them on to the NSIPA Registry, all in one place.</p>
+      </div></section>
+      <section class="login-panel"><form class="login-card" data-form="login" novalidate>
+        <h2>Sign in</h2>
+        <p class="small muted" style="margin:0">Use your DataBridge account.</p>
+        ${l.error ? html`<div class="callout crit" role="alert">${l.error}</div>` : ''}
+        <label class="field">Email<input type="email" id="login-email" autocomplete="username" data-bind="login.email" value="${l.email}" placeholder="name@example.org" required></label>
+        <label class="field">Password<span class="pw"><input type="password" id="login-password" autocomplete="current-password" required><button type="button" class="btn ghost sm pw-toggle" data-act="pw-toggle" aria-controls="login-password" aria-pressed="false">Show</button></span></label>
+        <button class="btn primary lg" type="submit" data-act="login">Sign in</button>
+      </form></section></div>`;
+  }
+  function startSession(user) {
+    UI.user = { email: user.email, name: user.name };
+    E.state.user = user.email;
+    E.setRole(user.role);
+    UI.nsr.operator = UI.nsr.operator || user.email;
+    UI.page = allowedPage(UI.page);
+  }
+  function signIn() {
+    const l = UI.login;
+    const user = findUser(l.email);
+    const field = document.getElementById('login-password');
+    const pw = field ? field.value : '';
+    if (!String(l.email).trim() || !pw) { l.error = 'Enter your email and password.'; return; }
+    if (!user || user.password !== pw) { l.error = 'Incorrect email or password. Check them and try again.'; return; }
+    l.error = ''; l.email = '';
+    try { sessionStorage.setItem(SESSION_KEY, user.email); } catch (_) { /* storage blocked: sign-in lasts until reload */ }
+    UI.page = 'home';
+    startSession(user);
+    toast(`Signed in as ${user.name}.`);
+  }
+  function signOut() {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch (_) { /* nothing stored */ }
+    // Keys and per-page state belong to the person who signed in; none of it carries over.
+    Object.assign(UI.nsr, { key: '', submitKey: '', operator: '', cfg: null, households: null, deliveries: null, selected: [], preview: null, result: null, confirm: false, error: null, notes: {} });
+    Object.assign(UI, { user: null, page: 'home', modal: null, payloadView: null, wiz: newWizard(), pages: {}, expanded: new Set(), errOpen: null, toast: null, tview: 'list' });
+    E.setRole('INGESTION_OPERATOR');
+  }
+  document.addEventListener('submit', (e) => {
+    if (!e.target.matches('[data-form="login"]')) return;
+    e.preventDefault();
+    signIn();
+    render();
+  });
+
   function render() {
+    if (!UI.user) {
+      document.getElementById('app').innerHTML = loginPage().s;
+      const f = document.getElementById(UI.login.email ? 'login-password' : 'login-email');
+      if (f) f.focus();
+      return;
+    }
     const active = document.activeElement;
     const focusId = active && active.id;
     const selStart = active && 'selectionStart' in active ? active.selectionStart : null;
@@ -1734,6 +1803,10 @@
     }
   }
   const startPage = (location.hash || '').replace('#', '');
+  // A sign-in lasts for this browser tab (sessionStorage holds the email only, never a password or key).
+  let remembered = null;
+  try { remembered = findUser(sessionStorage.getItem(SESSION_KEY)); } catch (_) { /* storage blocked */ }
+  if (remembered) startSession(remembered);
   if (PAGE_FN[startPage] && startPage !== 'run') UI.page = allowedPage(startPage);
   render();
 

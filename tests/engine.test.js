@@ -241,9 +241,9 @@ test('dry run evaluates records but never writes to SR1', () => {
   assert.ok(dry.stages.find((s) => s.key === 'DELIVER_PRIMARY').status === 'SKIPPED');
 });
 
-test('RBAC: read-only viewer cannot start runs; denial is audited', () => {
+test('RBAC: a role without permission is refused; denial is audited', () => {
   const e = fresh();
-  e.setRole('READ_ONLY');
+  e.state.role = 'NOBODY'; // no such role: no permissions
   assert.throws(() => e.startRun('SRC-NSR-NASSCO', { mode: 'API' }), /permission: run.start/);
   assert.ok(e.state.audit.some((a) => a.action === 'AUTHZ_DENIED'));
   e.setRole('PLATFORM_ADMIN');
@@ -255,20 +255,19 @@ test('RBAC: read-only viewer cannot start runs; denial is audited', () => {
   assert.ok(e.viewRawPayload(run.records[0].id, 'Investigating ticket DQ-1042'));
 });
 
-test('RBAC: three roles. Platform Admin has every permission, Operator pushes and sends, Read-only nothing', () => {
-  assert.deepEqual(Object.keys(DB.ROLES), ['PLATFORM_ADMIN', 'INGESTION_OPERATOR', 'READ_ONLY']);
+test('RBAC: two roles. Platform Admin has every permission, Operator pushes and sends', () => {
+  assert.deepEqual(Object.keys(DB.ROLES), ['PLATFORM_ADMIN', 'INGESTION_OPERATOR']);
   const all = DB.PERMISSIONS.map(([p]) => p);
   const matrix = Object.fromEntries(Object.entries(DB.ROLES).map(([k, r]) => [k, all.filter((p) => r.perms.includes(p))]));
   assert.deepEqual(matrix.PLATFORM_ADMIN, all, 'admin holds every permission, payload.view included');
   assert.deepEqual(matrix.INGESTION_OPERATOR, ['source.test', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download', 'nsr.preview', 'nsr.submit']);
-  assert.deepEqual(matrix.READ_ONLY, []);
   for (const p of ['audit.view', 'security.view', 'payload.view', 'source.edit', 'mapping.edit', 'destination.edit']) assert.ok(!matrix.INGESTION_OPERATOR.includes(p), `operator must not have ${p}`);
   for (const r of Object.values(DB.ROLES)) for (const p of r.perms) assert.ok(all.includes(p), `unknown permission ${p}`);
 });
 
 test('RBAC: a removed role falls back to Operator; an unknown role is refused', () => {
   const e = fresh();
-  for (const old of ['SOURCE_CONFIG_ADMIN', 'DATA_QUALITY_ANALYST', 'AUDITOR']) {
+  for (const old of ['SOURCE_CONFIG_ADMIN', 'DATA_QUALITY_ANALYST', 'AUDITOR', 'READ_ONLY']) {
     assert.equal(DB.normalizeRole(old), 'INGESTION_OPERATOR');
     e.setRole(old);
     assert.equal(e.state.role, 'INGESTION_OPERATOR');
@@ -322,4 +321,21 @@ test('seeded demo: KPIs are consistent with the records and reconciliation ident
   for (const run of e.state.runs) assert.ok(checksHold(e, [run]), run.id);
   const a = e.analytics({ range: '7d' });
   assert.equal(a.byDay.reduce((s, d) => s + d.received, 0), m.fetched);
+});
+
+test('replica: false: one registry. No replication stage, nothing waits on a second registry', () => {
+  const e = DB.createEngine(SCHEMA, { seed: 7, now: Date.UTC(2026, 10, 1, 9), replica: false });
+  e.setRole('PLATFORM_ADMIN');
+  assert.deepEqual(e.state.destinations.map((d) => d.id), ['MASTER_SR1']);
+  for (const id of ['S01', 'S13', 'S14']) {
+    const run = runScenario(e, id);
+    assert.ok(!run.stages.some((s) => s.key === 'REPLICA_SYNC'), id);
+    const rc = e.reconcileSummary([run]);
+    assert.equal(rc.replicaPending + rc.replicaFailed + rc.replicaConfirmed, 0, id);
+    assert.ok(!rc.checks.some((c) => /SR2/.test(c.name)), id);
+    assert.ok(rc.checks.every((c) => c.ok), id);
+    assert.ok(!['REPLICA_PENDING', 'REPLICA_FAILED'].includes(e.runStatus(run)), id);
+  }
+  e.advanceClock(600000);
+  assert.ok(!e.state.errors.some((x) => /^REPLICA_/.test(x.code)), 'no replication exceptions');
 });
