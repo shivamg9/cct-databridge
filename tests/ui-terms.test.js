@@ -50,7 +50,7 @@ test('standard domain terms are used, keeping distinct failures distinct', () =>
   assert.equal(T.friendlyError('FIELD_VALIDATION_FAILED').title, 'Validation failed');
   assert.equal(T.friendlyError('FILE_SCHEMA_MISMATCH').title, 'Schema mismatch');
   assert.equal(T.friendlyError('FIELD_MAPPING_FAILED').title, 'Mapping error');
-  assert.match(T.friendlyError('REPLICA_SYNC_PENDING').explain, /Master Registry 1 is updated/);
+  assert.match(T.friendlyError('MASTER_WRITE_FAILED').explain, /NSIPA Registry/);
   const titles = Object.values(T.ERROR_MESSAGES).map((m) => m.title);
   assert.equal(new Set(titles).size, titles.length, 'every code has a distinct title');
   for (const s of ['FAILED', 'REPLICA_FAILED', 'NEEDS_RECONCILIATION']) assert.notEqual(T.runStatus(s).label, 'Action required');
@@ -99,10 +99,10 @@ test('every state reached in the 18 scenarios has a label, and engine text is sc
     assert.ok(T.ERROR_MESSAGES[err.code], `no message for raised code ${err.code}`);
     assert.ok(T.RECORD_STATUS.resolution[err.resolution], `no label for resolution ${err.resolution}`);
   }
-  // The five journey steps cover every engine stage exactly once.
+  // The four journey steps cover every engine stage exactly once (the console runs without the replica stage).
   const covered = T.JOURNEY.flatMap(([, keys]) => keys);
   assert.equal(new Set(covered).size, covered.length);
-  for (const k of Object.keys(T.STAGE_LABELS)) assert.ok(covered.includes(k), `stage ${k} missing from journey`);
+  for (const k of Object.keys(T.STAGE_LABELS).filter((x) => x !== 'REPLICA_SYNC')) assert.ok(covered.includes(k), `stage ${k} missing from journey`);
 });
 
 test('every audit action, role, permission and scenario has plain wording', () => {
@@ -117,8 +117,10 @@ test('every audit action, role, permission and scenario has plain wording', () =
 });
 
 test('scrub replaces destination IDs and known codes in free text', () => {
-  assert.equal(T.scrub('MASTER_SR1 is disabled'), 'Master Registry 1 is disabled');
-  assert.equal(T.scrub('Written to SR1, pending on SR2'), 'Written to Master Registry 1, pending on Master Registry 2');
+  assert.equal(T.scrub('MASTER_SR1 is disabled'), 'NSIPA Registry is disabled');
+  assert.equal(T.scrub('Written to SR1'), 'Written to NSIPA Registry');
+  assert.doesNotMatch(Object.values(T.ERROR_MESSAGES).map((m) => m.explain).join(' ') + Object.values(T.STAGE_LABELS).join(' ') + T.JOURNEY.map((j) => j[0]).join(' '), /Master Registry|Registry [12]/);
+  assert.deepEqual(T.JOURNEY.map((j) => j[0]), ['Receive', 'Validate', 'Write to NSIPA Registry', 'Reconcile']);
   assert.equal(T.scrub('AUTHENTICATION_FAILED: 401 from source'), 'Authentication failed: 401 from source');
   assert.equal(T.hasRawCode(T.scrub('REPLICA_SYNC_FAILED and COMPLETED_WITH_ERRORS')), false);
 });
@@ -139,7 +141,7 @@ test('simplified console: four sections at most, Settings for administrators onl
   assert.ok(T.NAV.length <= 4);
   for (const [, l] of T.NAV) assert.ok(l.split(/\s+/).length <= 3, `${l} over 3 words`);
   assert.deepEqual(T.NAV.map(([, l]) => l), ['Home', 'Add Records', 'Transfers', 'Settings']);
-  for (const r of ['INGESTION_OPERATOR', 'READ_ONLY']) assert.ok(!T.SETTINGS_ROLES.includes(r), `${r} must not see Settings`);
+  for (const r of ['INGESTION_OPERATOR']) assert.ok(!T.SETTINGS_ROLES.includes(r), `${r} must not see Settings`);
   for (const r of T.SETTINGS_ROLES) assert.ok(DB.ROLES[r], `unknown role ${r}`);
   for (const p of ['sources', 'mapping', 'destinations', 'audit', 'security', 'recon', 'errors', 'quality', 'lineage', 'architecture']) assert.ok(T.SETTINGS_PAGES.includes(p), `${p} is not under Settings`);
   for (const p of ['home', 'ingest', 'runs', 'run']) assert.ok(!T.SETTINGS_PAGES.includes(p), `${p} must stay open to operators`);
@@ -213,11 +215,10 @@ test('wording: NSR reads as NSIPA Registry and "by hand" as "manually", codes an
   for (const v of Object.values(T.PERM_LABELS)) assert.doesNotMatch(v, /\bNSR\b/);
 });
 
-test('roles: three labels, and only Platform Admin sees Settings', () => {
-  assert.deepEqual(Object.keys(T.ROLE_LABELS).sort(), ['INGESTION_OPERATOR', 'PLATFORM_ADMIN', 'READ_ONLY']);
+test('roles: two labels, and only Platform Admin sees Settings', () => {
+  assert.deepEqual(Object.keys(T.ROLE_LABELS).sort(), ['INGESTION_OPERATOR', 'PLATFORM_ADMIN']);
   assert.equal(T.ROLE_LABELS.PLATFORM_ADMIN, 'Platform Admin');
   assert.equal(T.ROLE_LABELS.INGESTION_OPERATOR, 'Operator');
-  assert.equal(T.ROLE_LABELS.READ_ONLY, 'Read-only');
   assert.deepEqual(T.SETTINGS_ROLES, ['PLATFORM_ADMIN']);
 });
 

@@ -26,11 +26,11 @@
     FIELD_MAPPING_FAILED: { title: 'Mapping error', explain: 'Required fields are not mapped.', impact: 'Transfer did not start.', next: 'Correct the field mapping and publish.', auto: false, needsUser: true, action: 'Correct mapping' },
     TRANSFORMATION_FAILED: { title: 'Conversion failed', explain: 'A source value could not be converted.', impact: 'Records not written.', next: 'Correct the value or the mapping rule.', auto: false, needsUser: true, action: 'View records' },
     DUPLICATE_RECORD: { title: 'Duplicate in file', explain: 'The same record appears more than once.', impact: 'Only the first copy was processed.', next: 'No action unless both are genuine.', auto: false, needsUser: false, action: 'View records' },
-    MATCH_REQUIRES_REVIEW: { title: 'Possible duplicate', explain: 'Records may already exist in the master registry.', impact: 'On hold, not written.', next: 'Review each match.', auto: false, needsUser: true, action: 'Review' },
-    MASTER_WRITE_FAILED: { title: 'Write failed', explain: 'Records could not be saved to Master Registry 1.', impact: '', next: 'Retry, or correct at source if rejected.', auto: false, needsUser: true, action: 'Retry' },
-    MASTER_WRITE_OUTCOME_UNKNOWN: { title: 'Write outcome unknown', explain: 'Master Registry 1 did not confirm these writes.', impact: 'Not counted as written.', next: 'Reconcile before resending.', auto: false, needsUser: true, action: 'Reconcile' },
-    REPLICA_SYNC_PENDING: { title: 'Replication pending', explain: 'Master Registry 1 is updated; Master Registry 2 is catching up.', impact: '', next: 'No action needed.', auto: true, needsUser: false, action: 'View transfer' },
-    REPLICA_SYNC_FAILED: { title: 'Replication failed', explain: 'Records are in Master Registry 1 but not Master Registry 2.', impact: '', next: 'Reconcile to request re-sync.', auto: false, needsUser: true, action: 'Reconcile' },
+    MATCH_REQUIRES_REVIEW: { title: 'Possible duplicate', explain: 'Records may already exist in the NSIPA Registry.', impact: 'On hold, not written.', next: 'Review each match.', auto: false, needsUser: true, action: 'Review' },
+    MASTER_WRITE_FAILED: { title: 'Write failed', explain: 'Records could not be saved to the NSIPA Registry.', impact: '', next: 'Retry, or correct at source if rejected.', auto: false, needsUser: true, action: 'Retry' },
+    MASTER_WRITE_OUTCOME_UNKNOWN: { title: 'Write outcome unknown', explain: 'The NSIPA Registry did not confirm these writes.', impact: 'Not counted as written.', next: 'Reconcile before resending.', auto: false, needsUser: true, action: 'Reconcile' },
+    REPLICA_SYNC_PENDING: { title: 'Replication pending', explain: 'The NSIPA Registry is still confirming these records.', impact: '', next: 'No action needed.', auto: true, needsUser: false, action: 'View transfer' },
+    REPLICA_SYNC_FAILED: { title: 'Replication failed', explain: 'The NSIPA Registry could not confirm these records.', impact: '', next: 'Reconcile to request re-sync.', auto: false, needsUser: true, action: 'Reconcile' },
     RECONCILIATION_MISMATCH: { title: 'Reconciliation mismatch', explain: 'Confirmed counts differ from expected totals.', impact: '', next: 'Reconcile the transfer.', auto: false, needsUser: true, action: 'Reconcile' },
   };
   const FALLBACK = { title: 'Unknown exception', explain: 'An unrecognised problem was recorded.', impact: '', next: 'Contact support with the reference.', auto: false, needsUser: true, action: 'Contact support' };
@@ -55,8 +55,8 @@
   // Status filter options: one per operator label, mapped to the engine states it covers.
   const RUN_STATUS_FILTER = [
     ['In progress', ['RUNNING', 'QUEUED']], ['Completed', ['COMPLETED']], ['Completed with errors', ['COMPLETED_WITH_ERRORS']],
-    ['Retry scheduled', ['AWAITING_RETRY']], ['Reconciliation pending', ['NEEDS_RECONCILIATION']], ['Replication pending', ['REPLICA_PENDING']],
-    ['Replication failed', ['REPLICA_FAILED']], ['Review required', ['NEEDS_REVIEW']], ['Failed or blocked', ['FAILED', 'BLOCKED']],
+    ['Retry scheduled', ['AWAITING_RETRY']], ['Reconciliation pending', ['NEEDS_RECONCILIATION']],
+    ['Review required', ['NEEDS_REVIEW']], ['Failed or blocked', ['FAILED', 'BLOCKED']],
   ];
 
   // Per-record states, by aspect.
@@ -75,19 +75,18 @@
   const STAGE_LABELS = {
     PREFLIGHT: 'Pre-flight checks', AUTHENTICATE: 'Authentication', EXTRACT: 'Extraction', UPLOAD_SCAN: 'Upload scan', PARSE: 'File parsing',
     SCHEMA_CHECK: 'Schema check', MAP_TRANSFORM: 'Mapping', VALIDATE: 'Validation', DEDUPLICATE: 'Duplicate detection',
-    DELIVER_PRIMARY: 'Write to Master Registry 1', CONFIRM_COMMIT: 'Commit confirmation', REPLICA_SYNC: 'Replication check', RECONCILE: 'Reconciliation',
+    DELIVER_PRIMARY: 'Write to NSIPA Registry', CONFIRM_COMMIT: 'Commit confirmation', REPLICA_SYNC: 'Replication check', RECONCILE: 'Reconciliation',
   };
-  // The five steps shown on the progress timeline, grouping the engine stages.
+  // The four steps shown on the progress timeline, grouping the engine stages.
   const JOURNEY = [
     ['Receive', ['PREFLIGHT', 'AUTHENTICATE', 'EXTRACT', 'UPLOAD_SCAN', 'PARSE']],
     ['Validate', ['SCHEMA_CHECK', 'MAP_TRANSFORM', 'VALIDATE', 'DEDUPLICATE']],
-    ['Write (Registry 1)', ['DELIVER_PRIMARY', 'CONFIRM_COMMIT']],
-    ['Replicate (Registry 2)', ['REPLICA_SYNC']],
+    ['Write to NSIPA Registry', ['DELIVER_PRIMARY', 'CONFIRM_COMMIT']],
     ['Reconcile', ['RECONCILE']],
   ];
 
-  // Three roles. The keys stay as the engine defines them; only the labels are for people.
-  const ROLE_LABELS = { PLATFORM_ADMIN: 'Platform Admin', INGESTION_OPERATOR: 'Operator', READ_ONLY: 'Read-only' };
+  // Two roles. The keys stay as the engine defines them; only the labels are for people.
+  const ROLE_LABELS = { PLATFORM_ADMIN: 'Platform Admin', INGESTION_OPERATOR: 'Operator' };
   // Verb phrases: used in "Your role cannot …" and the access-control matrix.
   const PERM_LABELS = {
     'source.edit': 'manage sources', 'source.toggle': 'enable or disable sources', 'source.test': 'check connections',
@@ -136,8 +135,8 @@
   }
   function scrub(text) {
     return brand(text)
-      .replace(/\bMASTER_SR([12])\b/g, 'Master Registry $1')
-      .replace(/\bSR([12])\b/g, 'Master Registry $1')
+      .replace(/\bMASTER_SR[12]\b/g, 'NSIPA Registry')
+      .replace(/\bSR[12]\b/g, 'NSIPA Registry')
       .replace(/\(ERR-\d+\)/g, '')
       .replace(CODE_RE, (c) => (ERROR_MESSAGES[c] ? ERROR_MESSAGES[c].title : RUN_STATUS[c] ? RUN_STATUS[c].label : 'exception'))
       .replace(/\s{2,}/g, ' ').trim();
@@ -180,12 +179,12 @@
 
   const TERMS = {
     runs: 'Transfer history', newRun: 'New transfer', api: 'API', import: 'File upload', destination: 'Destination',
-    primary: 'Master Registry 1', replica: 'Master Registry 2', reconcile: 'Reconciliation', exceptions: 'Exceptions',
+    primary: 'NSIPA Registry', reconcile: 'Reconciliation', exceptions: 'Exceptions',
     retry: 'Retry', mapping: 'Field mapping', validation: 'Validation', dedup: 'Duplicate detection', lineage: 'Data lineage', audit: 'Audit log', rbac: 'Access control',
   };
   // Demonstration scenarios. The engine keeps its own technical descriptions.
   const SCENARIO_TEXT = {
-    S01: ['API transfer', 'All records written and replicated.'],
+    S01: ['API transfer', 'All records written.'],
     S02: ['File upload', 'Template file validated; all rows written.'],
     S03: ['Required fields missing', '4 records fail validation.'],
     S04: ['Invalid formats', 'Bad NIN, phone, date and account values rejected.'],
@@ -195,7 +194,7 @@
     S08: ['Authentication failure', 'Source rejects credentials; nothing received.'],
     S09: ['Timeout and rate limit', 'Retried automatically; transfer completes.'],
     S10: ['Temporary write failure', '4 records retry, then succeed.'],
-    S11: ['Write rejected', '2 records rejected by Master Registry 1.'],
+    S11: ['Write rejected', '2 records rejected by the NSIPA Registry.'],
     S12: ['Write outcome unknown', 'Reconcile finds 2 written; resends 2 safely.'],
     S13: ['Replication delayed', 'Master Registry 2 catches up after ~3 min.'],
     S14: ['Replication failure', '3 written records never reach Master Registry 2.'],

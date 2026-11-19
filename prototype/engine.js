@@ -162,17 +162,18 @@
     ['nsr.submit', 'Send households to the NSIPA Registry'],
   ];
 
-  // Three roles. Platform Admin holds every permission; Operator adds records and sends them to the
-  // NSIPA Registry but has no Settings; Read-only changes nothing.
+  // Two roles. Platform Admin holds every permission; Operator adds records and sends them to the
+  // NSIPA Registry but has no Settings.
   const ROLES = {
     PLATFORM_ADMIN: { label: 'Platform Admin', perms: PERMISSIONS.map(([p]) => p) },
     INGESTION_OPERATOR: { label: 'Operator', perms: ['source.test', 'run.start', 'run.retry', 'run.reconcile', 'error.resolve', 'report.download', 'nsr.preview', 'nsr.submit'] },
-    READ_ONLY: { label: 'Read-only', perms: [] },
   };
   // Roles that no longer exist. State saved under one of them continues as Operator.
-  const RETIRED_ROLES = ['SOURCE_CONFIG_ADMIN', 'DATA_QUALITY_ANALYST', 'AUDITOR'];
+  const RETIRED_ROLES = ['SOURCE_CONFIG_ADMIN', 'DATA_QUALITY_ANALYST', 'AUDITOR', 'READ_ONLY'];
   const normalizeRole = (role) => (ROLES[role] ? role : RETIRED_ROLES.includes(role) ? 'INGESTION_OPERATOR' : null);
-  const roleOf = (role) => ROLES[normalizeRole(role) || 'READ_ONLY'];
+  // An unknown role gets no permissions at all.
+  const NO_ROLE = { label: 'No role', perms: [] };
+  const roleOf = (role) => ROLES[normalizeRole(role)] || NO_ROLE;
 
   const SCENARIOS = [
     { id: 'S01', title: 'Successful API ingestion', source: 'SRC-NSR-NASSCO', mode: 'API', sim: { pages: 3, pageSize: 10 }, expect: 'All records written to SR1 and confirmed in SR2.' },
@@ -471,11 +472,11 @@
     ];
   }
 
-  function seedDestinations(now) {
+  function seedDestinations(now, replica) {
     return [
       { id: 'MASTER_SR1', role: 'PRIMARY', name: 'NSR master register (socialregistrydb)', endpoint: 'POST /partner/ingest_data?data_model=nsr (mock)', authRef: 'vault://databridge/destinations/sr1/mtls-client', enabled: true, health: 'HEALTHY', deliveryPolicy: 'Idempotent upsert by idempotency key; batch size 10', retry: { maxAttempts: 5, baseMs: 2000, factor: 2, capMs: 60000, jitter: 'full' }, lastDeliveryAt: null },
       { id: 'MASTER_SR2', role: 'REPLICA', name: 'NSR read replica', endpoint: 'GET /registry/records/{internal_record_id} (mock read probe)', authRef: 'vault://databridge/destinations/sr2/read-only', enabled: true, health: 'HEALTHY', deliveryPolicy: 'Read-only. Populated by SR1 replication, never written by middleware', retry: { maxAttempts: 3, baseMs: 30000, factor: 2, capMs: 300000, jitter: 'full' }, lagThresholdMs: 60000, lastSyncAt: null },
-    ];
+    ].filter((d) => replica || d.role === 'PRIMARY');
   }
 
   // ---------------------------------------------------------------------------
@@ -487,6 +488,8 @@
   function createEngine(schema, opts) {
     opts = opts || {};
     const rng = mulberry32(opts.seed || 20261027);
+    // opts.replica === false: no second registry. Records are complete once the registry confirms the write.
+    const REPLICA = opts.replica !== false;
     const fieldsByName = Object.fromEntries(schema.fields.map((f) => [f.name, f]));
     const state = {
       now: opts.now || Date.now(),
@@ -505,7 +508,7 @@
       counters: { duplicatesPrevented: 0 },
     };
     state.sources = seedSources(state.now);
-    state.destinations = seedDestinations(state.now);
+    state.destinations = seedDestinations(state.now, REPLICA);
     for (const s of state.sources) {
       const rows = s.layout === 'CCT_TEMPLATE_V1' ? templateMapping(schema) : clone(MAPPINGS[s.layout]);
       state.mappings[s.id] = { sourceId: s.id, version: 1, transformVersion: 'tx-lib-1.0', publishedAt: state.now - 30 * DAY, publishedBy: 'seed (prototype)', rows, history: [{ version: 1, at: state.now - 30 * DAY, by: 'seed (prototype)', note: 'Initial mapping' }] };
@@ -808,8 +811,8 @@
     }
 
     // ---- runs ----------------------------------------------------------------
-    const API_STAGES = ['PREFLIGHT', 'AUTHENTICATE', 'EXTRACT', 'SCHEMA_CHECK', 'MAP_TRANSFORM', 'VALIDATE', 'DEDUPLICATE', 'DELIVER_PRIMARY', 'CONFIRM_COMMIT', 'REPLICA_SYNC', 'RECONCILE'];
-    const FILE_STAGES = ['PREFLIGHT', 'UPLOAD_SCAN', 'PARSE', 'SCHEMA_CHECK', 'MAP_TRANSFORM', 'VALIDATE', 'DEDUPLICATE', 'DELIVER_PRIMARY', 'CONFIRM_COMMIT', 'REPLICA_SYNC', 'RECONCILE'];
+    const API_STAGES = ['PREFLIGHT', 'AUTHENTICATE', 'EXTRACT', 'SCHEMA_CHECK', 'MAP_TRANSFORM', 'VALIDATE', 'DEDUPLICATE', 'DELIVER_PRIMARY', 'CONFIRM_COMMIT', 'REPLICA_SYNC', 'RECONCILE'].filter((k) => REPLICA || k !== 'REPLICA_SYNC');
+    const FILE_STAGES = ['PREFLIGHT', 'UPLOAD_SCAN', 'PARSE', 'SCHEMA_CHECK', 'MAP_TRANSFORM', 'VALIDATE', 'DEDUPLICATE', 'DELIVER_PRIMARY', 'CONFIRM_COMMIT', 'REPLICA_SYNC', 'RECONCILE'].filter((k) => REPLICA || k !== 'REPLICA_SYNC');
     const STAGE_LABELS = { PREFLIGHT: 'Pre-flight checks', AUTHENTICATE: 'Authenticate', EXTRACT: 'Extract (paged)', UPLOAD_SCAN: 'Upload scan / quarantine', PARSE: 'Parse file', SCHEMA_CHECK: 'Schema check', MAP_TRANSFORM: 'Map + transform', VALIDATE: 'Validate', DEDUPLICATE: 'De-duplicate + match', DELIVER_PRIMARY: 'Deliver to MASTER_SR1', CONFIRM_COMMIT: 'Confirm SR1 commit', REPLICA_SYNC: 'Verify MASTER_SR2', RECONCILE: 'Reconcile' };
 
     function startRun(sourceId, o) {
@@ -1258,10 +1261,12 @@
       p.status = 'WRITTEN'; p.writtenAt = state.now;
       resolveErrors(r, ['MASTER_WRITE_FAILED', 'MASTER_WRITE_OUTCOME_UNKNOWN'], p.viaReconcile ? 'Confirmed by reconciliation' : `Delivered on attempt ${p.attempts.length}`);
       const f = r.fault || {};
+      if (!REPLICA) return;
       r.replica = { status: 'PENDING', dueAt: state.now + (f.replicaDelayMs || 2000), confirmedAt: null, lagMs: null, attempts: 0, willFail: f.replica === 'fail' };
     }
 
     function processReplica() {
+      if (!REPLICA) return;
       const threshold = state.destinations[1].lagThresholdMs;
       for (const run of state.runs) {
         for (const r of run.records) {
@@ -1465,7 +1470,7 @@
             if (ps === 'WRITTEN') {
               bucket('primaryWritten', r);
               if (r.primary.duplicatePrevented) bucket('duplicatesPrevented', r);
-              if (r.replica.status === 'CONFIRMED') bucket('replicaConfirmed', r);
+              if (!REPLICA) { /* no second registry to confirm */ } else if (r.replica.status === 'CONFIRMED') bucket('replicaConfirmed', r);
               else if (r.replica.status === 'FAILED') bucket('replicaFailed', r);
               else bucket('replicaPending', r);
             } else if (ps === 'DEAD_LETTER' || ps === 'REJECTED') bucket('primaryFailed', r);
@@ -1490,6 +1495,7 @@
         { name: 'SR1 written = SR2 confirmed + SR2 pending + SR2 failed', lhs: s.primaryWritten, rhs: s.replicaConfirmed + s.replicaPending + s.replicaFailed, ok: s.primaryWritten === s.replicaConfirmed + s.replicaPending + s.replicaFailed },
         { name: 'SR1 acknowledged (middleware) = records held by SR1 for these runs', lhs: s.primaryWritten, rhs: destinationCount, ok: s.primaryWritten === destinationCount },
       ];
+      if (!REPLICA) s.checks = s.checks.filter((c) => !/SR2/.test(c.name));
       s.destinationMismatch = s.primaryWritten !== destinationCount;
       s.outstanding = s.awaitingRetry + s.unknown + s.inFlight + s.replicaPending + s.replicaFailed + s.heldForReview;
       s.balanced = s.checks.every((c) => c.ok) && s.outstanding === 0;
@@ -1523,7 +1529,7 @@
         replicationLagMs: pendingLag.length ? Math.max(...pendingLag) : lastConfirmed ? lastConfirmed.replica.lagMs : 0,
         replicationLagIsLive: pendingLag.length > 0,
         successRate: rc.accepted ? rc.primaryWritten / rc.accepted : null,
-        endToEndRate: rc.received ? rc.replicaConfirmed / rc.received : null,
+        endToEndRate: rc.received ? (REPLICA ? rc.replicaConfirmed : rc.primaryWritten) / rc.received : null,
         openErrors: state.errors.filter((e) => e.resolution === 'OPEN' || e.resolution === 'RETRYING').length,
         blockedAttempts: state.blockedAttempts.length,
         reconciliation: rc,
