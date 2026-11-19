@@ -272,7 +272,7 @@ cct-databridge/
 
 ## Assumptions
 
-- Source API contracts (NASSCO, Josh) are **unknown**. NASSCO payloads use the NSR form 4.5 field names from the build sheet. The Josh layout is an illustrative example.
+- Source API contracts (NASSCO, Jos) are **unknown**. NASSCO payloads use the NSR form 4.5 field names from the build sheet. The Jos layout is an illustrative example.
 - State and LGA codes are placeholders. The code system is open decision 2 in the build sheet.
 - Records are flattened to one row per individual with household columns. The real `ingest_data` payload groups a household with its members.
 - Mandatory flags and match keys are the build sheet's **proposals**.

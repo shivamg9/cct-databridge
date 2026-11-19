@@ -206,7 +206,7 @@ test('pager: each list keeps its page, and a filter change returns it to page 1'
 });
 
 test('wording: NSR reads as NSIPA Registry and "by hand" as "manually", codes and IDs unchanged', () => {
-  assert.equal(T.brand('Send to NSR'), 'Send to NSIPA Registry');
+  assert.equal(T.brand('Sent to NSR'), 'Sent to NSIPA Registry');
   assert.equal(T.brand('Send it again by hand'), 'Send it again manually');
   assert.equal(T.brand('Send households to the NSR Household Register'), 'Send households to the NSIPA Registry');
   assert.equal(T.brand('NSR household serial no.'), 'NSIPA Registry household serial no.');

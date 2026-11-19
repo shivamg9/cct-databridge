@@ -23,7 +23,7 @@ Source body (credentials are references only):
 
 ```json
 {
-  "id": "SRC-STATE-JOSH", "name": "Josh State Registry", "type": "State Registry",
+  "id": "SRC-STATE-JOSH", "name": "Jos State Registry", "type": "State Registry",
   "connection": "API", "modes": ["API"], "env": "Testing",
   "baseUrl": "https://josh-registry.mock.invalid", "endpoint": "/api/v2/beneficiaries", "method": "POST",
   "authRef": "vault://databridge/sources/josh/api-key",

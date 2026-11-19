@@ -180,7 +180,7 @@ test('every Settings page still renders for administrators', { skip }, () => {
   assert.deepEqual(u.errors, []);
 });
 
-test('Send to NSIPA Registry: permitted roles only; check, review and send through the API with keys kept in page memory', { skip }, async () => {
+test('Sent to NSIPA Registry: permitted roles only; check, review and send through the API with keys kept in page memory', { skip }, async () => {
   const u = boot();
   const calls = [];
   const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
@@ -234,7 +234,7 @@ test('Send to NSIPA Registry: permitted roles only; check, review and send throu
   assert.deepEqual(u.errors, []);
 });
 
-test('after a transfer, Save to Server pushes each record, then Send to NSIPA Registry opens on the server list', { skip }, async () => {
+test('after a transfer, Save to Server pushes each record, then Sent to NSIPA Registry opens on the server list', { skip }, async () => {
   const u = boot();
   const pushed = [];
   const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
@@ -274,7 +274,7 @@ test('after a transfer, Save to Server pushes each record, then Send to NSIPA Re
   assert.deepEqual(u.errors, []);
 });
 
-test('leaving a finished transfer without saving does not lose it: Connect on Send to NSIPA Registry saves it first', { skip }, async () => {
+test('leaving a finished transfer without saving does not lose it: Connect on Sent to NSIPA Registry saves it first', { skip }, async () => {
   const u = boot();
   const order = [];
   const pushed = [];
@@ -478,7 +478,7 @@ test('wording: NSIPA Registry, Sample Files, NASSCO National Social Registry fir
       assert.doesNotMatch(u.$('#app').textContent, /(?<![\w-])NSR(?![\w-])|by hand|Demo Files/, page);
     }
   }
-  assert.ok(u.$('[data-act="tview"][data-arg="nsr"]').textContent.includes('Send to NSIPA Registry'));
+  assert.ok(u.$('[data-act="tview"][data-arg="nsr"]').textContent.includes('Sent to NSIPA Registry'));
   // Branding: "DataBridge" only; the clock shows the time without demo controls.
   for (const page of ['home', 'ingest', 'runs', 'settings', 'sources']) {
     if (page === 'sources') { u.click('main [data-act="nav"][data-arg="sources"]'); u.click('main [data-act="source"][data-arg="SRC-LEGACY-PILOT"]'); } else u.click(`[data-act="nav"][data-arg="${page}"]`);
